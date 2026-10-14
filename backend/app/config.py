@@ -48,6 +48,15 @@ class Settings(BaseSettings):
 
     worker_interval_seconds: int = 30
 
+    # Marketplace (M2)
+    media_dir: str = "media"  # where listing photos are stored (a Docker volume in compose)
+    media_url: str = "/media"  # public URL prefix for photos
+    max_photos_per_listing: int = 5
+    max_upload_mb: int = 10
+    photo_max_px: int = 1280  # long edge after resizing (PNG data costs)
+    thumb_max_px: int = 320
+    reports_to_auto_hide: int = 3  # distinct open reports that hide a listing until a moderator decides
+
     @model_validator(mode="after")
     def _prod_guards(self) -> "Settings":
         if self.env == "prod":

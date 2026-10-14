@@ -62,6 +62,21 @@ def main() -> None:
     done = call("POST", f"/v1/orders/{order['id']}/handover", seller, {"pin": paid["handover_pin"]})
     check(f"handover PIN released K{done['seller_paid']} to seller (fee K{done['fee_charged']})",
           done["status"] == "RELEASED" and done["seller_paid"] == "97.00")
+    # Marketplace (M2): list an item, find it, first buyer to pay takes the last unit
+    provinces = call("GET", "/v1/locations")
+    morobe = next(p for p in provinces if p["name"] == "Morobe")
+    lae = next(d for d in call("GET", f"/v1/locations?parent_id={morobe['id']}") if d["name"] == "Lae")
+    tv_audio = next(c for top in call("GET", "/v1/categories") for c in top["children"] if c["slug"] == "tv-audio")
+    listing = call("POST", "/v1/listings", seller, {
+        "title": "Smoke test solar lamp", "description": "10W panel", "category_id": tv_audio["id"],
+        "price": "60.00", "quantity": 1, "condition": "new", "delivery_options": ["meetup"],
+        "province_id": morobe["id"], "district_id": lae["id"]})
+    found = call("GET", "/v1/listings?q=smoke%20sol")
+    check("listing created and found by search", any(x["id"] == listing["id"] for x in found))
+    buy = call("POST", f"/v1/listings/{listing['id']}/buy", buyer, {"quantity": 1}, idem=True)
+    call("POST", f"/v1/orders/{buy['id']}/pay", buyer)
+    check("first buyer paid: listing now sold out", call("GET", f"/v1/listings/{listing['id']}")["status"] == "sold_out")
+
     integrity = call("GET", "/v1/admin/reports/integrity", finance)
     check("ledger integrity: every entry balanced, cached balances match postings", integrity["ok"] is True)
     recon = call("GET", "/v1/admin/reports/trust-reconciliation", finance)

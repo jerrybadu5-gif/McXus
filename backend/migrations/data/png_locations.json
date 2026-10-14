@@ -1,0 +1,29 @@
+{
+  "_note": "Seed data. Provinces and the 89 districts (open electorates, 2012-2017 boundaries) as known by the McXus team; suburbs are common names for Port Moresby and Lae. VERIFY against the PNG National Statistical Office / Electoral Commission lists before launch and correct via a new migration.",
+  "provinces": [
+    {"name": "National Capital District", "region": "Southern", "districts": ["Moresby North-East", "Moresby North-West", "Moresby South"],
+     "suburbs": ["Badili", "Baruni", "Boroko", "Ela Beach", "Erima", "Gabutu", "Gerehu", "Gordons", "Hanuabada", "Hohola", "Joyce Bay", "June Valley", "Kaugere", "Kila Kila", "Koki", "Konedobu", "Korobosea", "Manu", "Morata", "Paga Hill", "Pari", "Rainbow", "Saraga", "Six Mile", "Eight Mile", "Nine Mile", "Tatana", "Taurama", "Tokarara", "Town", "Waigani"]},
+    {"name": "Central", "region": "Southern", "districts": ["Abau", "Goilala", "Kairuku-Hiri", "Rigo"]},
+    {"name": "Gulf", "region": "Southern", "districts": ["Kerema", "Kikori"]},
+    {"name": "Milne Bay", "region": "Southern", "districts": ["Alotau", "Esa'ala", "Kiriwina-Goodenough", "Samarai-Murua"]},
+    {"name": "Oro (Northern)", "region": "Southern", "districts": ["Ijivitari", "Sohe"]},
+    {"name": "Western (Fly)", "region": "Southern", "districts": ["Middle Fly", "North Fly", "South Fly"]},
+    {"name": "Chimbu (Simbu)", "region": "Highlands", "districts": ["Chuave", "Gumine", "Karimui-Nomane", "Kerowagi", "Kundiawa-Gembogl", "Sinasina-Yonggamugl"]},
+    {"name": "Eastern Highlands", "region": "Highlands", "districts": ["Daulo", "Goroka", "Henganofi", "Kainantu", "Lufa", "Obura-Wonenara", "Okapa", "Unggai-Bena"]},
+    {"name": "Enga", "region": "Highlands", "districts": ["Kandep", "Kompiam-Ambum", "Lagaip-Porgera", "Wabag", "Wapenamanda"]},
+    {"name": "Hela", "region": "Highlands", "districts": ["Komo-Margarima", "Koroba-Kopiago", "Tari-Pori"]},
+    {"name": "Jiwaka", "region": "Highlands", "districts": ["Anglimp-South Waghi", "Jimi", "North Waghi"]},
+    {"name": "Southern Highlands", "region": "Highlands", "districts": ["Ialibu-Pangia", "Imbonggu", "Kagua-Erave", "Mendi-Munihu", "Nipa-Kutubu"]},
+    {"name": "Western Highlands", "region": "Highlands", "districts": ["Dei", "Hagen Central", "Mul-Baiyer", "Tambul-Nebilyer"]},
+    {"name": "East Sepik", "region": "Momase", "districts": ["Ambunti-Dreikikir", "Angoram", "Maprik", "Wewak", "Wosera-Gawi", "Yangoru-Saussia"]},
+    {"name": "Madang", "region": "Momase", "districts": ["Bogia", "Madang", "Middle Ramu", "Rai Coast", "Sumkar", "Usino-Bundi"]},
+    {"name": "Morobe", "region": "Momase", "districts": ["Bulolo", "Finschhafen", "Huon Gulf", "Kabwum", "Lae", "Markham", "Menyamya", "Nawae", "Tewai-Siassi"],
+     "district_suburbs": {"Lae": ["Bugandi", "Bumbu", "Butibam", "Chinatown", "Eleven Mile", "Eriku", "Five Mile", "Four Mile", "Igam", "Kamkumung", "Malahang", "Nine Mile", "Omili", "Taraka", "Three Mile", "Top Town", "Two Mile", "Voco Point"]}},
+    {"name": "West Sepik (Sandaun)", "region": "Momase", "districts": ["Aitape-Lumi", "Nuku", "Telefomin", "Vanimo-Green River"]},
+    {"name": "East New Britain", "region": "Islands", "districts": ["Gazelle", "Kokopo", "Pomio", "Rabaul"]},
+    {"name": "Manus", "region": "Islands", "districts": ["Manus"]},
+    {"name": "New Ireland", "region": "Islands", "districts": ["Kavieng", "Namatanai"]},
+    {"name": "West New Britain", "region": "Islands", "districts": ["Kandrian-Gloucester", "Talasea"]},
+    {"name": "Autonomous Region of Bougainville", "region": "Islands", "districts": ["Central Bougainville", "North Bougainville", "South Bougainville"]}
+  ]
+}

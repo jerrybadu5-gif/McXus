@@ -17,8 +17,8 @@ Payment rails (bank statement matching → card → mobile money → cash agents
 | Module | Scope | Status |
 |---|---|---|
 | M0 | Repo, compose, CI, phone sign-in, roles | **done (in this module)** |
-| M1 | Ledger, wallet (sandbox), escrow, fees, timers | **done — awaiting Jerry's review** |
-| M2 | Marketplace: listings, search, location, stores, trust score v1 | next |
+| M1 | Ledger, wallet (sandbox), escrow, fees, timers | **done — passed 14/10/2026 (PR #1)** |
+| M2 | Marketplace: listings, photos, search, locations, stock reservation, reviews, trust score, reports | **built — awaiting Jerry's review** |
 | M3 | Messaging server + Android app (1:1, groups, media, E2EE, key backup), chat-with-seller | |
 | M4 | Disputes (3-stage, evidence), admin console | |
 | M5 | Status/posts, channels, calls | |
@@ -62,3 +62,16 @@ Guarantees:
 - Role checks are server-side on every staff route; maker-checker on deposits (enforced in code and by a DB constraint).
 - Money actions accept an `Idempotency-Key` so retries on bad connections never move money twice.
 - Production refuses dev secrets and sandbox mode.
+
+## Marketplace (M2)
+
+Tables: `locations` (province > district > suburb), `categories` (two levels, `banned` flag), `listings`
+(price, stock, condition, delivery options, location, status, generated `search_tsv` + GIN index),
+`listing_photos`, `reviews` (one per order), `listing_reports`. Orders gain `listing_id`, `quantity`,
+`stock_reserved`.
+
+Listing status: `active` → `sold_out` (stock 0) / `paused` / `closed` (seller) / `under_review` (3 reports) /
+`removed` (moderator). Public: `active` and `sold_out`.
+
+Stock: reserved inside the pay transaction under a row lock on the listing (first payer wins); released inside
+the same transaction as any refund. See ADR 0006.

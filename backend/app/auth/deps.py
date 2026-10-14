@@ -34,3 +34,12 @@ def require_role(*roles: str) -> Callable[..., User]:
         return user
 
     return check
+
+
+def optional_user(
+    creds: HTTPAuthorizationCredentials | None = Depends(bearer), db: Session = Depends(get_db)
+) -> User | None:
+    """For public pages that show a little more to a signed-in user (e.g. their own paused listing)."""
+    if creds is None:
+        return None
+    return current_user(creds, db)

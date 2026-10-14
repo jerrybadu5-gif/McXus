@@ -1,0 +1,25 @@
+{
+  "_note": "Seed categories. 'banned' categories cannot be listed (requirements §5); staff can unban some (e.g. alcohol, betel nut) later if policy changes.",
+  "categories": [
+    {"slug": "electronics", "name": "Electronics", "children": [["phones-tablets", "Phones & tablets"], ["computers", "Computers & laptops"], ["tv-audio", "TV, audio & solar"], ["electronics-accessories", "Accessories & chargers"]]},
+    {"slug": "vehicles", "name": "Vehicles", "children": [["cars", "Cars & 4WDs"], ["motorbikes", "Motorbikes"], ["boats", "Boats & outboard motors"], ["vehicle-parts", "Parts & tyres"]]},
+    {"slug": "property", "name": "Property", "children": [["property-rent", "Houses & rooms for rent"], ["property-sale", "Houses for sale"], ["land", "Land"], ["commercial-space", "Shops & offices"]]},
+    {"slug": "home-garden", "name": "Home & garden", "children": [["furniture", "Furniture"], ["appliances", "Appliances"], ["kitchen", "Kitchen & household"], ["garden-tools", "Garden & tools"]]},
+    {"slug": "fashion", "name": "Fashion", "children": [["clothing", "Clothing"], ["shoes", "Shoes"], ["bags", "Bags"], ["jewellery", "Jewellery & watches"]]},
+    {"slug": "food-produce", "name": "Food & produce", "children": [["fresh-produce", "Fresh fruit & vegetables"], ["cooked-food", "Cooked food"], ["fish-meat", "Fish & meat"], ["coffee-cocoa", "Coffee, cocoa & vanilla"]]},
+    {"slug": "arts-crafts", "name": "Arts & crafts", "children": [["bilums", "Bilums"], ["carvings", "Carvings"], ["traditional-crafts", "Traditional crafts & bilas"]]},
+    {"slug": "building", "name": "Building materials", "children": [["timber", "Timber"], ["roofing-iron", "Roofing iron & steel"], ["cement-blocks", "Cement & blocks"], ["plumbing-electrical", "Plumbing & electrical"]]},
+    {"slug": "livestock-farming", "name": "Livestock & farming", "children": [["pigs", "Pigs"], ["poultry", "Poultry"], ["seeds-farm-supplies", "Seeds & farm supplies"]]},
+    {"slug": "baby-kids", "name": "Baby & kids", "children": [["baby-gear", "Baby gear"], ["kids-clothing", "Kids' clothing"], ["toys", "Toys"], ["school-supplies", "School supplies"]]},
+    {"slug": "sports-outdoors", "name": "Sports & outdoors", "children": [["sports-equipment", "Sports equipment"], ["fishing-camping", "Fishing & camping"]]},
+    {"slug": "services", "name": "Services", "children": [["repairs", "Repairs"], ["building-trades", "Building & trades"], ["transport-delivery", "Transport & delivery"], ["lessons-tutoring", "Lessons & tutoring"], ["beauty", "Beauty & hair"], ["events-catering", "Events & catering"]]},
+    {"slug": "other", "name": "Other", "children": []}
+  ],
+  "banned": [
+    ["firearms", "Firearms & ammunition"], ["explosives", "Explosives"], ["drugs", "Drugs & controlled substances"],
+    ["alcohol", "Alcohol"], ["tobacco", "Tobacco & cigarettes"], ["betel-nut", "Betel nut (buai)"],
+    ["protected-wildlife", "Protected wildlife"], ["counterfeit", "Counterfeit goods"],
+    ["sim-id-documents", "SIM cards & identity documents"], ["adult", "Adult content"],
+    ["prescription-medicines", "Prescription medicines"], ["financial-products", "Financial products & crypto"]
+  ]
+}

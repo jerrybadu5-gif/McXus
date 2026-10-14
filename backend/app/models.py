@@ -16,6 +16,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     Numeric,
     SmallInteger,
     String,
@@ -28,7 +29,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 Money = Numeric(14, 2)
 
-ROLES = ("user", "support", "kyc", "mediator", "finance", "compliance", "admin")
+ROLES = ("user", "support", "kyc", "moderator", "mediator", "finance", "compliance", "admin")
 ACCOUNT_KINDS = ("asset", "liability", "revenue", "expense", "equity")
 ORDER_STATUSES = (
     "CREATED",  # buyer placed the order, not paid yet
@@ -72,6 +73,8 @@ class User(TimestampMixin, Base):
     role: Mapped[str] = mapped_column(String(16), default="user")
     kyc_tier: Mapped[int] = mapped_column(SmallInteger, default=0)
     status: Mapped[str] = mapped_column(String(10), default="active")
+    store_name: Mapped[str | None] = mapped_column(String(80))  # shown on listings; verified badge needs tier 3
+    bio: Mapped[str] = mapped_column(String(500), default="")
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
@@ -144,6 +147,7 @@ class Order(TimestampMixin, Base):
         CheckConstraint(_in("status", ORDER_STATUSES), name="status_valid"),
         CheckConstraint("amount > 0", name="amount_positive"),
         CheckConstraint("buyer_id <> seller_id", name="buyer_not_seller"),
+        CheckConstraint("quantity >= 1", name="quantity_positive"),
         Index("ix_orders_buyer", "buyer_id", "created_at"),
         Index("ix_orders_seller", "seller_id", "created_at"),
         Index("ix_orders_status_deadline", "status", "accept_deadline"),
@@ -156,6 +160,9 @@ class Order(TimestampMixin, Base):
     title: Mapped[str] = mapped_column(String(140))
     amount: Mapped[Decimal] = mapped_column(Money)
     currency: Mapped[str] = mapped_column(String(3), default="PGK")
+    listing_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("listings.id"))  # None = custom order
+    quantity: Mapped[int] = mapped_column(SmallInteger, default=1)
+    stock_reserved: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[str] = mapped_column(String(20), default="CREATED")
     handover_pin_hash: Mapped[str | None] = mapped_column(String(64))
     handover_attempts: Mapped[int] = mapped_column(SmallInteger, default=0)
@@ -255,3 +262,120 @@ class IdempotencyKey(TimestampMixin, Base):
     request_hash: Mapped[str] = mapped_column(String(64))
     response_status: Mapped[int] = mapped_column(SmallInteger)
     response_body: Mapped[dict[str, Any]] = mapped_column(JSONB)
+
+
+# ---------- marketplace (module M2) ----------
+
+LISTING_STATUSES = ("active", "paused", "sold_out", "under_review", "removed", "closed")
+CONDITIONS = ("new", "like_new", "good", "fair", "not_applicable")
+REPORT_REASONS = ("prohibited", "scam", "wrong_category", "offensive", "other")
+
+
+class Location(Base):
+    """PNG province > district > suburb. Seeded by migration 0002; staff can correct names later."""
+
+    __tablename__ = "locations"
+    __table_args__ = (
+        CheckConstraint("level IN ('province', 'district', 'suburb')", name="level_valid"),
+        UniqueConstraint("parent_id", "name", name="uq_location_parent_name"),
+    )
+
+    id: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+    level: Mapped[str] = mapped_column(String(10))
+    name: Mapped[str] = mapped_column(String(80))
+    parent_id: Mapped[int | None] = mapped_column(ForeignKey("locations.id"))
+    region: Mapped[str] = mapped_column(String(20), default="")  # Highlands | Islands | Momase | Southern
+
+
+class Category(Base):
+    __tablename__ = "categories"
+
+    id: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+    slug: Mapped[str] = mapped_column(String(60), unique=True)
+    name: Mapped[str] = mapped_column(String(80))
+    parent_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"))
+    banned: Mapped[bool] = mapped_column(Boolean, default=False)
+    sort: Mapped[int] = mapped_column(SmallInteger, default=0)
+
+
+class Listing(TimestampMixin, Base):
+    __tablename__ = "listings"
+    __table_args__ = (
+        CheckConstraint(_in("status", LISTING_STATUSES), name="status_valid"),
+        CheckConstraint(_in("condition", CONDITIONS), name="condition_valid"),
+        CheckConstraint("price > 0", name="price_positive"),
+        CheckConstraint("quantity_available >= 0", name="quantity_not_negative"),
+        Index("ix_listings_status_created", "status", "created_at"),
+        Index("ix_listings_seller", "seller_id", "created_at"),
+        Index("ix_listings_category", "category_id"),
+        Index("ix_listings_location", "province_id", "district_id", "suburb_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    seller_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    title: Mapped[str] = mapped_column(String(140))
+    description: Mapped[str] = mapped_column(Text, default="")
+    category_id: Mapped[int] = mapped_column(ForeignKey("categories.id"))
+    price: Mapped[Decimal] = mapped_column(Money)
+    quantity_available: Mapped[int] = mapped_column(Integer, default=1)
+    condition: Mapped[str] = mapped_column(String(16), default="good")
+    delivery_options: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    province_id: Mapped[int] = mapped_column(ForeignKey("locations.id"))
+    district_id: Mapped[int | None] = mapped_column(ForeignKey("locations.id"))
+    suburb_id: Mapped[int | None] = mapped_column(ForeignKey("locations.id"))
+    latitude: Mapped[Decimal | None] = mapped_column(Numeric(8, 5))
+    longitude: Mapped[Decimal | None] = mapped_column(Numeric(8, 5))
+    status: Mapped[str] = mapped_column(String(16), default="active")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    # search_tsv: generated tsvector column + GIN index, created in migration 0002 (not mapped)
+
+
+class ListingPhoto(TimestampMixin, Base):
+    __tablename__ = "listing_photos"
+    __table_args__ = (Index("ix_listing_photos_listing", "listing_id", "position"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    listing_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("listings.id"))
+    position: Mapped[int] = mapped_column(SmallInteger, default=0)
+    key: Mapped[str] = mapped_column(String(120))  # storage key of the full image; thumbnail is key + "_t"
+    width: Mapped[int] = mapped_column(SmallInteger)
+    height: Mapped[int] = mapped_column(SmallInteger)
+    bytes: Mapped[int] = mapped_column(Integer)
+
+
+class Review(TimestampMixin, Base):
+    """One rating per completed order, written by the buyer."""
+
+    __tablename__ = "reviews"
+    __table_args__ = (
+        CheckConstraint("stars BETWEEN 1 AND 5", name="stars_valid"),
+        Index("ix_reviews_seller", "seller_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    order_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orders.id"), unique=True)
+    seller_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    buyer_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    stars: Mapped[int] = mapped_column(SmallInteger)
+    comment: Mapped[str] = mapped_column(String(500), default="")
+
+
+class ListingReport(TimestampMixin, Base):
+    __tablename__ = "listing_reports"
+    __table_args__ = (
+        CheckConstraint(_in("reason", REPORT_REASONS), name="reason_valid"),
+        CheckConstraint("status IN ('open', 'actioned', 'dismissed')", name="status_valid"),
+        UniqueConstraint("listing_id", "reporter_id", name="uq_report_once"),
+        Index("ix_listing_reports_status", "status", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    listing_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("listings.id"))
+    reporter_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    reason: Mapped[str] = mapped_column(String(20))
+    note: Mapped[str] = mapped_column(String(500), default="")
+    status: Mapped[str] = mapped_column(String(10), default="open")
+    decided_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

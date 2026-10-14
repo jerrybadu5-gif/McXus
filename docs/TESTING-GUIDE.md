@@ -1,4 +1,8 @@
-# M1 review and test guide (for Jerry)
+# Review and test guide (for Jerry)
+
+M1 (money core) passed on 14/10/2026. **M2 (marketplace) checks are in section 5.**
+
+# M1 money core
 
 Nothing is pushed to GitHub until you have run this and said it passes.
 
@@ -58,5 +62,34 @@ All values are settings in `backend/.env` (`MCXUS_SELLER_ACCEPT_MINUTES`, `MCXUS
 
 ## 4. When it passes
 
-Tell me "M1 passed" and I will push it to `github.com/jerrybadu5-gif/mcxus` (public) on a `feat/m1-money-core`
-branch with a pull request for you to merge, then start M2 (marketplace).
+Done for M1 (PR #1). For M2: tell me "M2 passed" and I will push `feat/m2-marketplace` and open PR #2.
+
+## 5. M2 marketplace checks (20 minutes)
+
+`.\run-tests.ps1` should now show **87 passed**; `python scripts\smoke_test.py` adds two marketplace lines.
+New demo users: moderator `70000007`, second buyer `70000008`. Run `.\start-dev.ps1` again first, which applies
+the new database migration (your M1 test data is kept).
+
+| # | Try this | You should see |
+|---|---|---|
+| M1 | `GET /v1/locations` then `GET /v1/locations?parent_id=<Morobe id>` then the Lae id | 22 provinces; Morobe districts; Lae suburbs (Eriku, Top Town…) |
+| M2 | `GET /v1/categories` | category tree; no firearms/alcohol/betel nut |
+| M3 | Seller: `POST /v1/listings` with title `Fresh buai` | `prohibited_content` |
+| M4 | Seller: `POST /v1/listings` a real item (quantity 1, a leaf category id, Morobe + Lae) | `active`, seller badge `new_seller` |
+| M5 | Seller: `POST /v1/listings/{id}/photos` with a phone photo | 1280 px wide/high; open `thumb_url` in the browser (http://localhost:8000 + url) |
+| M6 | No token: `GET /v1/listings?q=` + first letters of your title | your listing (browsing is public) |
+| M7 | Second buyer (`70000008`) tops up K500 first. Buyer (`70000001`) and second buyer: both `POST /v1/listings/{id}/buy` | two `CREATED` orders |
+| M8 | Buyer pays first; second buyer pays | first: `FUNDED`, listing `sold_out`; second: `sold_out` error, wallet unchanged |
+| M9 | Seller `/reject`s the first order | listing back to `active`; second buyer can now pay |
+| M10 | Complete an order (accept + handover PIN), buyer `POST /v1/orders/{id}/review` 5 stars | `GET /v1/sellers/{id}` shows rating 5.0, 1 completed sale |
+| M11 | Three different users `POST /v1/listings/{id}/report` | after the third, listing hidden from search (`under_review`) |
+| M12 | Moderator (`70000007`): `GET /v1/mod/reports`, then `POST /v1/mod/listings/{id}/decision` `{"action":"restore"}` | listing back; reports cleared |
+| M13 | Seller `PUT /v1/me/profile` with a `store_name` | listings and seller page show the store name |
+
+### Please confirm
+
+1. **District list** (`backend/migrations/data/png_locations.json`) is the 89-district set from my knowledge;
+   check against the official list (2022 boundaries added new electorates) and send corrections.
+2. **Blocked words** (`backend/app/marketplace/moderation.py`): add any local terms you want blocked.
+3. **Trust badges:** new seller until 3 completed sales; bronze 40+, silver 60+, gold 80+; "verified store"
+   needs tier 3 and 60+; "caution" below 40. A lost dispute costs 10 points, a late seller cancellation 5.

@@ -22,6 +22,8 @@ services:
     env_file: [{path: ./backend/.env, required: false}]
     environment:
       MCXUS_DATABASE_URL: postgresql+psycopg://mcxus:${MCXUS_DB_PASSWORD:-mcxus}@db:5432/mcxus
+    volumes:
+      - media:/app/media   # listing photos
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
@@ -41,3 +43,4 @@ services:
 
 volumes:
   pgdata:
+  media:

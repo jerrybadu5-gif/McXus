@@ -3,7 +3,7 @@
 Privacy-first super app for Papua New Guinea and the Pacific: private messaging, a marketplace, and Stars
 payments protected by escrow.
 
-> **Status: Module M1 — money core (sandbox).** Test Stars only; no real money moves until a licensed issuer
+> **Status: M1 money core (passed) + M2 marketplace (in review) — sandbox.** Test Stars only; no real money moves until a licensed issuer
 > partner is connected (see [ADR 0001](docs/decisions/0001-stars-as-e-money-sandbox-first.md)).
 
 ## What is in this module
@@ -15,6 +15,7 @@ payments protected by escrow.
 | Ledger | Double-entry, append-only (enforced by the database), every entry balanced, integrity and BPNG trust-reconciliation reports |
 | Escrow | Order state machine: pay → seller accepts within 20 min → dispatch → handover PIN / buyer confirms / auto-release after 7 days; cancellations, penalties, disputes with partial refunds |
 | Worker | Applies the 20-minute and 7-day timers every 30 seconds |
+| Marketplace (M2) | Listings with up to 5 photos, PNG provinces/districts/suburbs, search, first-buyer-to-pay stock reservation, ratings, seller trust badges, reports and moderation |
 
 1 Star = K1. All amounts are exact decimals, sent and returned as strings (`"150.00"`).
 
@@ -49,12 +50,13 @@ backend/app/
   wallet/service.py    deposits, withdrawals, sandbox top-up, limits
   escrow/service.py    order state machine and all escrow money movements
   escrow/fees.py       fee rules (pure functions)
+  marketplace/         listings, search, photos, stock, reviews, trust, moderation
   auth/                phone OTP, JWT, role checks
   api/                 HTTP routes and request/response schemas
   jobs.py              timer worker
   cli.py               make-admin, seed-demo, dev-token
-backend/migrations/    Alembic (0001: schema, append-only triggers, balanced-entry trigger, system accounts)
-backend/tests/         55 tests against real PostgreSQL
+backend/migrations/    Alembic (0001 money core; 0002 marketplace + PNG locations/categories seed in migrations/data)
+backend/tests/         87 tests against real PostgreSQL
 docs/                  architecture, decisions (ADRs), testing guide
 ```
 

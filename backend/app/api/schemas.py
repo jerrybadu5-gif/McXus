@@ -89,6 +89,8 @@ class OrderOut(BaseModel):
     title: str
     amount: Decimal
     currency: str
+    listing_id: uuid.UUID | None
+    quantity: int
     status: str
     funded_at: datetime | None
     accept_deadline: datetime | None
