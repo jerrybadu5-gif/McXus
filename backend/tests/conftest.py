@@ -5,6 +5,7 @@ and every test starts from empty tables.
 """
 
 import os
+import tempfile
 import uuid
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
@@ -14,6 +15,7 @@ TEST_DB = os.environ.get("MCXUS_TEST_DATABASE_URL", "postgresql+psycopg://mcxus:
 os.environ["MCXUS_DATABASE_URL"] = TEST_DB
 os.environ["MCXUS_ENV"] = "test"
 os.environ["MCXUS_SANDBOX_MODE"] = "true"
+os.environ["MCXUS_MEDIA_DIR"] = tempfile.mkdtemp(prefix="mcxus-media-")
 
 import pytest  # noqa: E402
 from alembic import command  # noqa: E402
@@ -32,8 +34,9 @@ from app.wallet.service import sandbox_topup  # noqa: E402
 BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RESET_SQL = """
 SET mcxus.allow_truncate = on;
-TRUNCATE postings, journal_entries, order_events, disputes, deposits, withdrawals, idempotency_keys,
-         otp_codes, orders RESTART IDENTITY;
+TRUNCATE postings, journal_entries, order_events, disputes, deposits, withdrawals, idempotency_keys, reviews,
+         listing_reports, listing_photos,
+         otp_codes, orders, listings RESTART IDENTITY;
 DELETE FROM ledger_accounts WHERE owner_id IS NOT NULL;
 UPDATE ledger_accounts SET balance = 0;
 DELETE FROM users;

@@ -1,8 +1,11 @@
 import logging
+import os
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
+from app.api.market_routes import router as market_router
 from app.api.routes import router
 from app.config import get_settings
 from app.errors import AppError, app_error_handler
@@ -20,7 +23,7 @@ app.add_exception_handler(AppError, app_error_handler)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Authorization", "Content-Type", "Idempotency-Key"],
 )
 
@@ -31,7 +34,10 @@ async def security_headers(request: Request, call_next):  # type: ignore[no-unty
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
-    response.headers["Cache-Control"] = "no-store"
+    if request.url.path.startswith(settings.media_url + "/"):
+        response.headers["Cache-Control"] = "public, max-age=604800, immutable"  # photos never change; save data
+    else:
+        response.headers["Cache-Control"] = "no-store"
     return response
 
 
@@ -41,3 +47,8 @@ def health() -> dict[str, object]:
 
 
 app.include_router(router)
+app.include_router(market_router)
+
+# Listing photos (public). Replaced by object storage + CDN before launch.
+os.makedirs(settings.media_dir, exist_ok=True)
+app.mount(settings.media_url, StaticFiles(directory=settings.media_dir), name="media")

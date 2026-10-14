@@ -34,6 +34,24 @@ jobs:
       - run: pytest -W ignore::DeprecationWarning
       - run: pip-audit --skip-editable
 
+  android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew testDebugUnitTest lintDebug assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mcxus-preview-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+
   docker:
     runs-on: ubuntu-latest
     steps:

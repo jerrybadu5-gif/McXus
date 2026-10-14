@@ -18,6 +18,8 @@ dependencies = [
   "psycopg[binary]>=3.2",
   "pyjwt>=2.9",
   "tzdata>=2024.1",  # time zone database; Windows has none built in
+  "pillow>=10.4",  # listing photos: resize, strip location metadata
+  "python-multipart>=0.0.20",  # photo uploads
 ]
 
 [project.optional-dependencies]

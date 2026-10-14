@@ -10,3 +10,10 @@ backups/
 node_modules/
 dist/
 .DS_Store
+media/
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+*.apk

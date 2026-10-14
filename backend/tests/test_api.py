@@ -125,3 +125,11 @@ def test_deposit_maker_checker_over_http(client, users):
     )
     assert ok.json()["status"] == "approved"
     assert client.get("/v1/wallet", headers=auth(users["buyer"])).json()["balance"] == "550.00"
+
+
+def test_sandbox_returns_dev_code(client, monkeypatch):
+    monkeypatch.setattr(auth_service, "send_sms", lambda *_: None)
+    body = client.post("/v1/auth/otp/request", json={"phone": "71230000"}).json()
+    assert len(body["dev_code"]) == 6
+    ok = client.post("/v1/auth/otp/verify", json={"phone": "71230000", "code": body["dev_code"]})
+    assert ok.status_code == 200

@@ -35,6 +35,7 @@ from app.api.schemas import (
 )
 from app.auth import service as auth
 from app.auth.deps import current_user, require_role
+from app.config import get_settings
 from app.db import get_db
 from app.errors import NotFound
 from app.escrow import service as escrow
@@ -56,8 +57,13 @@ Offset = Annotated[int, Query(ge=0)]
 
 @router.post("/auth/otp/request", status_code=202, tags=["auth"])
 def otp_request(body: OtpRequest, db: DB) -> dict[str, str]:
-    auth.request_code(db, body.phone)
+    """Sends the code by SMS. In sandbox mode (never production) the code is also returned as `dev_code`,
+    because no SMS provider is connected yet."""
+    code = auth.request_code(db, body.phone)
     db.commit()
+    settings = get_settings()
+    if settings.sandbox_mode and settings.env != "prod":
+        return {"status": "sent", "dev_code": code}
     return {"status": "sent"}
 
 

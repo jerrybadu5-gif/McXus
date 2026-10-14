@@ -23,6 +23,8 @@ DEMO_USERS = [
     ("+67570000004", "Finance Officer B", "finance", 2),
     ("+67570000005", "Dispute Mediator", "mediator", 2),
     ("+67570000006", "Admin", "admin", 2),
+    ("+67570000007", "Moderator", "moderator", 2),
+    ("+67570000008", "Second Buyer", "user", 2),
 ]
 
 

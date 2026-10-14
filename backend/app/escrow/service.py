@@ -46,6 +46,7 @@ from app.ledger.service import (
     system_account_id,
     user_account,
 )
+from app.marketplace import stock
 from app.models import Dispute, Order, OrderEvent, User
 from app.money import ZERO
 
@@ -128,7 +129,16 @@ def _assert_escrow_intact(db: Session, order: Order) -> None:
 # ---------- buyer and seller actions ----------
 
 
-def create_order(db: Session, buyer: User, seller_id: uuid.UUID, title: str, amount: Decimal) -> Order:
+def create_order(
+    db: Session,
+    buyer: User,
+    seller_id: uuid.UUID,
+    title: str,
+    amount: Decimal,
+    *,
+    listing_id: uuid.UUID | None = None,
+    quantity: int = 1,
+) -> Order:
     kyc.require(buyer.kyc_tier, "buy")
     seller = db.get(User, seller_id)
     if seller is None or seller.status != "active":
@@ -137,7 +147,15 @@ def create_order(db: Session, buyer: User, seller_id: uuid.UUID, title: str, amo
         raise AppError("You cannot buy from yourself", code="self_purchase")
     if not kyc.TIERS[seller.kyc_tier].can_sell:
         raise Conflict("This seller is not verified to sell yet", code="seller_not_verified")
-    order = Order(id=uuid.uuid4(), buyer_id=buyer.id, seller_id=seller.id, title=title, amount=amount)
+    order = Order(
+        id=uuid.uuid4(),
+        buyer_id=buyer.id,
+        seller_id=seller.id,
+        title=title,
+        amount=amount,
+        listing_id=listing_id,
+        quantity=quantity,
+    )
     db.add(order)
     db.flush()
     db.add(
@@ -155,6 +173,7 @@ def pay(db: Session, buyer: User, order_id: uuid.UUID) -> tuple[Order, str]:
     kyc.require(buyer.kyc_tier, "buy")
     now = clock.now()
     _transition(db, order, "FUNDED", buyer.id)
+    stock.reserve(db, order)  # first buyer to pay gets the item
     wallet = user_account(db, buyer.id, "wallet")
     post_entry(
         db,
@@ -415,6 +434,7 @@ def _refund_in_full(db: Session, order: Order, to: str, actor_id: uuid.UUID | No
     """No-fault return: every Star goes back to the buyer, nobody pays a fee."""
     _assert_escrow_intact(db, order)
     _transition(db, order, to, actor_id, reason)
+    stock.release(db, order)
     post_entry(
         db,
         "order_refund",
@@ -434,6 +454,7 @@ def _seller_fault_refund(db: Session, order: Order, to: str, actor_id: uuid.UUID
     """Full refund to the buyer, plus their share of the cancellation fee, which the seller pays now or owes."""
     _assert_escrow_intact(db, order)
     _transition(db, order, to, actor_id, reason)
+    stock.release(db, order)
     settings = get_settings()
     fee = cancel_fee(order.amount, settings)
     split = split_cancel_fee(fee, settings)
@@ -462,6 +483,7 @@ def _seller_fault_refund(db: Session, order: Order, to: str, actor_id: uuid.UUID
 def _buyer_cancel_with_fee(db: Session, order: Order, actor_id: uuid.UUID, reason: str) -> None:
     _assert_escrow_intact(db, order)
     _transition(db, order, "CANCELLED", actor_id, reason or "Buyer cancelled after payment")
+    stock.release(db, order)
     settings = get_settings()
     fee = cancel_fee(order.amount, settings)
     split = split_cancel_fee(fee, settings)

@@ -1,4 +1,8 @@
-# M1 review and test guide (for Jerry)
+# Review and test guide (for Jerry)
+
+M1 (money core) passed on 14/10/2026. **M2 (marketplace) checks are in section 5.**
+
+# M1 money core
 
 Nothing is pushed to GitHub until you have run this and said it passes.
 
@@ -58,5 +62,55 @@ All values are settings in `backend/.env` (`MCXUS_SELLER_ACCEPT_MINUTES`, `MCXUS
 
 ## 4. When it passes
 
-Tell me "M1 passed" and I will push it to `github.com/jerrybadu5-gif/mcxus` (public) on a `feat/m1-money-core`
-branch with a pull request for you to merge, then start M2 (marketplace).
+Done for M1 (PR #1). For M2: tell me "M2 passed" and I will push `feat/m2-marketplace` and open PR #2.
+
+## 5. M2 marketplace checks (20 minutes)
+
+`.\run-tests.ps1` should now show **87 passed**; `python scripts\smoke_test.py` adds two marketplace lines.
+New demo users: moderator `70000007`, second buyer `70000008`. Run `.\start-dev.ps1` again first, which applies
+the new database migration (your M1 test data is kept).
+
+| # | Try this | You should see |
+|---|---|---|
+| M1 | `GET /v1/locations` then `GET /v1/locations?parent_id=<Morobe id>` then the Lae id | 22 provinces; Morobe districts; Lae suburbs (Eriku, Top Town…) |
+| M2 | `GET /v1/categories` | category tree; no firearms/alcohol/betel nut |
+| M3 | Seller: `POST /v1/listings` with title `Fresh buai` | `prohibited_content` |
+| M4 | Seller: `POST /v1/listings` a real item (quantity 1, a leaf category id, Morobe + Lae) | `active`, seller badge `new_seller` |
+| M5 | Seller: `POST /v1/listings/{id}/photos` with a phone photo | 1280 px wide/high; open `thumb_url` in the browser (http://localhost:8000 + url) |
+| M6 | No token: `GET /v1/listings?q=` + first letters of your title | your listing (browsing is public) |
+| M7 | Second buyer (`70000008`) tops up K500 first. Buyer (`70000001`) and second buyer: both `POST /v1/listings/{id}/buy` | two `CREATED` orders |
+| M8 | Buyer pays first; second buyer pays | first: `FUNDED`, listing `sold_out`; second: `sold_out` error, wallet unchanged |
+| M9 | Seller `/reject`s the first order | listing back to `active`; second buyer can now pay |
+| M10 | Complete an order (accept + handover PIN), buyer `POST /v1/orders/{id}/review` 5 stars | `GET /v1/sellers/{id}` shows rating 5.0, 1 completed sale |
+| M11 | Three different users `POST /v1/listings/{id}/report` | after the third, listing hidden from search (`under_review`) |
+| M12 | Moderator (`70000007`): `GET /v1/mod/reports`, then `POST /v1/mod/listings/{id}/decision` `{"action":"restore"}` | listing back; reports cleared |
+| M13 | Seller `PUT /v1/me/profile` with a `store_name` | listings and seller page show the store name |
+
+### Please confirm
+
+1. **District list** (`backend/migrations/data/png_locations.json`) is the 89-district set from my knowledge;
+   check against the official list (2022 boundaries added new electorates) and send corrections.
+2. **Blocked words** (`backend/app/marketplace/moderation.py`): add any local terms you want blocked.
+3. **Trust badges:** new seller until 3 completed sales; bronze 40+, silver 60+, gold 80+; "verified store"
+   needs tier 3 and 60+; "caution" below 40. A lost dispute costs 10 points, a late seller cancellation 5.
+
+## 6. Android preview on your phone (30 minutes)
+
+Install: see `android/README.md` (start the laptop with `.\start-dev.ps1 -Lan`, same Wi-Fi, install
+`mcxus-preview.apk`). Use two phones if you have them, or sign out and in to switch between buyer and seller.
+
+| # | On the phone | You should see |
+|---|---|---|
+| P1 | Enter the server address, phone `70000002`, **Send code**, **Sign in** | code filled in (sandbox); Market tab |
+| P2 | **Sell**: title, category, price, Morobe → Lae → Eriku, **Save and add photos**, **Take photo** | listing page with your photo |
+| P3 | Try to screenshot the **Wallet** tab | Android refuses ("can't take screenshot") |
+| P4 | Sign out; sign in as buyer `70000001`; **Wallet** → top up 500 | balance K500.00 |
+| P5 | **Market**: type the first letters of your item, **Search**, open it, **Buy with Stars** | order page: QR code + 6-digit PIN |
+| P6 | Sign in as seller `70000002` → **Orders → Selling** → open the order → **Accept** | "Accepted" |
+| P7 | Type the buyer's PIN → **Confirm handover** | "Completed — Stars paid to the seller"; seller Wallet +K(price − 3%) |
+| P8 | Buyer: open the order → **Rate the seller** 5 stars | seller page shows ★ 5.0 |
+| P9 | Turn Wi-Fi off and tap Search | a clear "Cannot reach the McXus server" message, no crash |
+| P10 | Second buyer `70000008` tries to buy a sold-out item | "Sold out" — cannot pay |
+
+Please tell me: phone model and Android version, anything slow, confusing words, and screenshots of problems
+(from screens that allow them).
