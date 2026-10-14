@@ -124,7 +124,7 @@ def test_no_buyer_cancel_after_dispatch(db, users):
         escrow.cancel(db, users["buyer"], order.id, "")
 
 
-def test_auto_reject_after_20_minutes_seller_owes_fee(db, users, fake_clock):
+def test_auto_reject_after_20_minutes_is_free(db, users, fake_clock):
     order, _ = paid_order(db, users)
     fake_clock.advance(minutes=19, seconds=59)
     assert run_timers() == {}
@@ -133,17 +133,55 @@ def test_auto_reject_after_20_minutes_seller_owes_fee(db, users, fake_clock):
     db.expire_all()
     order = escrow.get_order(db, order.id)
     assert order.status == "AUTO_REJECTED"
-    assert balance(db, users["buyer"]) == D("505.00")  # full refund + K5 compensation
-    assert balance(db, users["seller"]) == D("0.00")
-    assert balance(db, users["seller"], "receivable") == D("10.00")  # seller owes the K10 fee
+    assert balance(db, users["buyer"]) == D("500.00")  # full refund, no fee
+    assert balance(db, users["seller"], "receivable") == D("0.00")
+    assert revenue(db) == D("0.00")
+    assert_books_ok(db)
+
+
+def test_seller_reject_within_window_is_free(db, users, fake_clock):
+    order, _ = paid_order(db, users)
+    fake_clock.advance(minutes=10)
+    escrow.reject(db, users["seller"], order.id, "out of stock")
+    db.commit()
+    assert order.status == "SELLER_REJECTED"
+    assert balance(db, users["buyer"]) == D("500.00")
+    assert balance(db, users["seller"], "receivable") == D("0.00")
+    assert revenue(db) == D("0.00")
+
+
+def test_seller_cancel_after_accept_free_within_25_minutes(db, users, fake_clock):
+    order, _ = paid_order(db, users)
+    escrow.accept(db, users["seller"], order.id)
+    fake_clock.advance(minutes=24, seconds=59)
+    escrow.cancel(db, users["seller"], order.id, "")
+    db.commit()
+    assert order.status == "SELLER_CANCELLED"
+    assert balance(db, users["buyer"]) == D("500.00")
+    assert revenue(db) == D("0.00")
+
+
+def late_seller_cancel(db, users, fake_clock, amount="200.00"):
+    order, _ = paid_order(db, users, amount)
+    escrow.accept(db, users["seller"], order.id)
+    fake_clock.advance(minutes=25)
+    escrow.cancel(db, users["seller"], order.id, "changed my mind")
+    db.commit()
+    return order
+
+
+def test_seller_cancel_after_25_minutes_pays_penalty(db, users, fake_clock):
+    order = late_seller_cancel(db, users, fake_clock)
+    assert order.status == "SELLER_CANCELLED"
+    assert balance(db, users["buyer"]) == D("505.00")  # full refund + K5 (half the K10 fee)
+    assert balance(db, users["seller"], "receivable") == D("10.00")  # empty wallet: whole fee owed
     assert revenue(db) == D("5.00")
+    assert order.fee_charged == D("10.00")
     assert_books_ok(db)
 
 
 def test_owed_penalty_is_taken_from_the_sellers_next_sale(db, users, fake_clock):
-    order, _ = paid_order(db, users)
-    fake_clock.advance(minutes=21)
-    run_timers()
+    late_seller_cancel(db, users, fake_clock)
     order2, pin2 = paid_order(db, users, "100.00")
     escrow.accept(db, users["seller"], order2.id)
     escrow.handover(db, users["seller"], order2.id, pin2)
@@ -154,29 +192,17 @@ def test_owed_penalty_is_taken_from_the_sellers_next_sale(db, users, fake_clock)
     assert_books_ok(db)
 
 
-def test_seller_reject_pays_what_wallet_allows_and_owes_the_rest(db, users):
+def test_late_seller_cancel_pays_what_wallet_allows_and_owes_the_rest(db, users, fake_clock):
     seller = users["seller"]
     first, pin = paid_order(db, users, "4.00")  # K4 sale -> seller nets K3 (min fee K1)
     escrow.accept(db, seller, first.id)
     escrow.handover(db, seller, first.id, pin)
     db.commit()
     assert balance(db, seller) == D("3.00")
-    order, _ = paid_order(db, users)
-    escrow.reject(db, seller, order.id, "out of stock")
-    db.commit()
-    assert order.status == "SELLER_REJECTED"
+    late_seller_cancel(db, users, fake_clock)
     assert balance(db, seller) == D("0.00")
     assert balance(db, seller, "receivable") == D("7.00")  # K10 fee: K3 paid now, K7 owed
     assert_books_ok(db)
-
-
-def test_seller_cancel_after_accept_is_penalised(db, users):
-    order, _ = paid_order(db, users)
-    escrow.accept(db, users["seller"], order.id)
-    escrow.cancel(db, users["seller"], order.id, "")
-    db.commit()
-    assert order.status == "SELLER_CANCELLED"
-    assert balance(db, users["buyer"]) == D("505.00")
 
 
 def test_accept_after_window_is_refused(db, users, fake_clock):

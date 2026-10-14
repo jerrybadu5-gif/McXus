@@ -53,7 +53,8 @@ Guarantees:
 | Buyer pays | D buyer wallet, C escrow |
 | Release (PIN / confirm / auto) | D escrow; C seller wallet (amount − 3% fee − owed penalties); C fee revenue; C seller receivable |
 | Buyer cancels after paying | D escrow; C buyer (amount − 5% fee); C seller ½ fee; C revenue ½ fee |
-| Seller rejects / misses 20 min / cancels | D escrow; C buyer full amount + ½ fee; D seller wallet (what they have) and D seller receivable (the rest); C revenue ½ fee |
+| Seller rejects within 20 min, window passes, or cancels accepted order within 25 min of payment | D escrow; C buyer full amount (no fees) |
+| Seller cancels accepted order 25+ min after payment | D escrow; C buyer full amount + ½ fee; D seller wallet (what they have) and D seller receivable (the rest); C revenue ½ fee |
 | Dispute resolved | D escrow; C buyer refund; C seller (rest − fee on rest); C revenue |
 
 ## Security notes

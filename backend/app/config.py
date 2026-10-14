@@ -27,7 +27,8 @@ class Settings(BaseSettings):
     sandbox_topup_max: Decimal = Decimal("1000.00")
 
     # Escrow timers
-    seller_accept_minutes: int = 20
+    seller_accept_minutes: int = 20  # reject or let this pass: no penalty
+    seller_penalty_free_minutes: int = 25  # seller may cancel an accepted order free until this long after payment
     auto_release_days: int = 7
     handover_pin_max_attempts: int = 5
 

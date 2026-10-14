@@ -9,13 +9,16 @@
                                                                               RELEASED
     ACCEPTED or DISPATCHED --dispute--> DISPUTED --mediator--> RESOLVED (release / refund / split)
 
-Money rules (Round 2, confirmed 14/10/2026):
-- No free cancellation once paid. Buyer cancels before dispatch: buyer pays the cancellation fee, shared
-  between the seller and the platform.
-- Seller rejects, lets the 20-minute window pass, or cancels after accepting: buyer gets a full refund plus a
-  share of the cancellation fee; the seller pays the fee from their wallet, and any shortfall is recorded as
-  owed and taken from the seller's next sale.
-- On release the seller pays the escrow fee; owed penalties are recovered first.
+Money rules (Jerry, 14/10/2026: "sellers sell to the first buyer that pays; buyers actively buy"):
+- Buyer cancels after paying (before dispatch): the buyer pays the cancellation fee, shared between the
+  seller and the platform. Before paying, cancelling is free.
+- Seller rejects within the 20-minute accept window, or the window passes (auto-reject): no penalty;
+  the buyer is refunded in full.
+- Seller cancels after accepting: free within 25 minutes of payment; later than that the seller pays the
+  cancellation fee (buyer refunded in full plus a share). If the seller's wallet is short, the rest is owed
+  and taken from their next sale.
+- Delivered and confirmed (handover PIN, buyer confirms, or auto-release): the seller pays the escrow fee;
+  owed penalties are recovered first.
 """
 
 import hashlib
@@ -184,7 +187,7 @@ def reject(db: Session, seller: User, order_id: uuid.UUID, reason: str) -> Order
     _require_party(order, seller, "seller")
     if order.status != "FUNDED":
         raise Conflict("Only a paid order that you have not accepted yet can be rejected", code="invalid_transition")
-    _seller_fault_refund(db, order, "SELLER_REJECTED", seller.id, reason or "Seller rejected the order")
+    _refund_in_full(db, order, "SELLER_REJECTED", seller.id, reason or "Seller rejected the order")
     return order
 
 
@@ -206,9 +209,12 @@ def cancel(db: Session, user: User, order_id: uuid.UUID, reason: str) -> Order:
             _transition(db, order, "CANCELLED", user.id, reason or "Seller cancelled before payment")
             order.closed_at = clock.now()
         elif order.status == "FUNDED":
-            _seller_fault_refund(db, order, "SELLER_REJECTED", user.id, reason or "Seller rejected the order")
+            _refund_in_full(db, order, "SELLER_REJECTED", user.id, reason or "Seller rejected the order")
         elif order.status == "ACCEPTED":
-            _seller_fault_refund(db, order, "SELLER_CANCELLED", user.id, reason or "Seller cancelled")
+            if _within_seller_grace(order):
+                _refund_in_full(db, order, "SELLER_CANCELLED", user.id, reason or "Seller cancelled (no penalty)")
+            else:
+                _seller_fault_refund(db, order, "SELLER_CANCELLED", user.id, reason or "Seller cancelled late")
         else:
             raise Conflict("This order can no longer be cancelled", code="invalid_transition")
     else:
@@ -338,7 +344,7 @@ def apply_timer(db: Session, order_id: uuid.UUID) -> str | None:
     now = clock.now()
     if order.status == "FUNDED" and order.accept_deadline and order.accept_deadline <= now:
         minutes = get_settings().seller_accept_minutes
-        _seller_fault_refund(db, order, "AUTO_REJECTED", None, f"Seller did not accept within {minutes} minutes")
+        _refund_in_full(db, order, "AUTO_REJECTED", None, f"Seller did not accept within {minutes} minutes")
         return order.status
     if order.status == "DISPATCHED" and order.auto_release_at and order.auto_release_at <= now:
         _release(
@@ -396,6 +402,31 @@ def _release(
     order.fee_charged = fee
     order.buyer_refunded = buyer_refund
     order.seller_paid = seller_net
+    order.closed_at = clock.now()
+
+
+def _within_seller_grace(order: Order) -> bool:
+    """True while the seller may still cancel an accepted order without penalty (25 minutes from payment)."""
+    grace = timedelta(minutes=get_settings().seller_penalty_free_minutes)
+    return order.funded_at is not None and clock.now() < order.funded_at + grace
+
+
+def _refund_in_full(db: Session, order: Order, to: str, actor_id: uuid.UUID | None, reason: str) -> None:
+    """No-fault return: every Star goes back to the buyer, nobody pays a fee."""
+    _assert_escrow_intact(db, order)
+    _transition(db, order, to, actor_id, reason)
+    post_entry(
+        db,
+        "order_refund",
+        [
+            debit(system_account_id(db, ESCROW), order.amount, f"Escrow closed: {order.title}"),
+            credit(user_account(db, order.buyer_id, "wallet").id, order.amount, f"Full refund: {order.title}"),
+        ],
+        order_id=order.id,
+        created_by=actor_id,
+        memo=reason,
+    )
+    order.buyer_refunded = order.amount
     order.closed_at = clock.now()
 
 
