@@ -1,0 +1,43 @@
+# McXus core (sandbox). Start: docker compose up -d   API docs: http://localhost:8000/docs
+services:
+  db:
+    image: postgres:16.6-alpine
+    environment:
+      POSTGRES_USER: mcxus
+      POSTGRES_PASSWORD: ${MCXUS_DB_PASSWORD:-mcxus}
+      POSTGRES_DB: mcxus
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts/init-test-db.sql:/docker-entrypoint-initdb.d/10-test-db.sql:ro
+    ports:
+      - "127.0.0.1:5433:5432"   # local only; 5433 so it does not clash with McLender or another Postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mcxus"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build: ./backend
+    env_file: [{path: ./backend/.env, required: false}]
+    environment:
+      MCXUS_DATABASE_URL: postgresql+psycopg://mcxus:${MCXUS_DB_PASSWORD:-mcxus}@db:5432/mcxus
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      db: {condition: service_healthy}
+    restart: unless-stopped
+
+  worker:   # applies escrow timers: 20-minute accept window and 7-day auto-release
+    build: ./backend
+    command: ["python", "-m", "app.jobs"]
+    healthcheck: {disable: true}   # no web server in the worker
+    env_file: [{path: ./backend/.env, required: false}]
+    environment:
+      MCXUS_DATABASE_URL: postgresql+psycopg://mcxus:${MCXUS_DB_PASSWORD:-mcxus}@db:5432/mcxus
+    depends_on:
+      api: {condition: service_healthy}
+    restart: unless-stopped
+
+volumes:
+  pgdata:
