@@ -1,3 +1,9 @@
 *.sh text eol=lf
 *.ps1 text eol=crlf
 *.py text eol=lf
+gradlew text eol=lf
+*.bat text eol=crlf
+*.jar binary
+*.keystore binary
+*.kts text eol=lf
+*.kt text eol=lf

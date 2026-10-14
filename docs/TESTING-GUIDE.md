@@ -93,3 +93,24 @@ the new database migration (your M1 test data is kept).
 2. **Blocked words** (`backend/app/marketplace/moderation.py`): add any local terms you want blocked.
 3. **Trust badges:** new seller until 3 completed sales; bronze 40+, silver 60+, gold 80+; "verified store"
    needs tier 3 and 60+; "caution" below 40. A lost dispute costs 10 points, a late seller cancellation 5.
+
+## 6. Android preview on your phone (30 minutes)
+
+Install: see `android/README.md` (start the laptop with `.\start-dev.ps1 -Lan`, same Wi-Fi, install
+`mcxus-preview.apk`). Use two phones if you have them, or sign out and in to switch between buyer and seller.
+
+| # | On the phone | You should see |
+|---|---|---|
+| P1 | Enter the server address, phone `70000002`, **Send code**, **Sign in** | code filled in (sandbox); Market tab |
+| P2 | **Sell**: title, category, price, Morobe → Lae → Eriku, **Save and add photos**, **Take photo** | listing page with your photo |
+| P3 | Try to screenshot the **Wallet** tab | Android refuses ("can't take screenshot") |
+| P4 | Sign out; sign in as buyer `70000001`; **Wallet** → top up 500 | balance K500.00 |
+| P5 | **Market**: type the first letters of your item, **Search**, open it, **Buy with Stars** | order page: QR code + 6-digit PIN |
+| P6 | Sign in as seller `70000002` → **Orders → Selling** → open the order → **Accept** | "Accepted" |
+| P7 | Type the buyer's PIN → **Confirm handover** | "Completed — Stars paid to the seller"; seller Wallet +K(price − 3%) |
+| P8 | Buyer: open the order → **Rate the seller** 5 stars | seller page shows ★ 5.0 |
+| P9 | Turn Wi-Fi off and tap Search | a clear "Cannot reach the McXus server" message, no crash |
+| P10 | Second buyer `70000008` tries to buy a sold-out item | "Sold out" — cannot pay |
+
+Please tell me: phone model and Android version, anything slow, confusing words, and screenshots of problems
+(from screens that allow them).
