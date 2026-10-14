@@ -85,11 +85,35 @@ def unclaimed_count(db: Session, device_id: uuid.UUID) -> int:
     )
 
 
+MAX_CLAIMS_PER_PEER_PER_DAY = 5
+
+
 def claim_key_package(db: Session, claimer: User, target_user_id: uuid.UUID) -> KeyPackage:
     """Hand out one unused KeyPackage of the target user (each is used once). SKIP LOCKED: concurrent claims
-    never receive the same one."""
+    never receive the same one.
+
+    Anti-abuse: KeyPackages are a limited resource; anyone draining them would stop others from starting chats.
+    So a claim needs an open, not-yet-encrypted chat between the two people, and at most 5 claims a day per pair."""
     if target_user_id == claimer.id:
         raise AppError("You cannot start a chat with yourself", code="self_chat")
+    pending = db.scalar(
+        select(Conversation.id).where(
+            Conversation.pair_key == _pair_key(claimer.id, target_user_id), Conversation.mls_ready_by.is_(None)
+        )
+    )
+    if pending is None:
+        raise Conflict("Open the chat first (or it is already set up)", code="no_pending_chat")
+    recent = db.scalar(
+        select(func.count())
+        .select_from(KeyPackage)
+        .where(
+            KeyPackage.user_id == target_user_id,
+            KeyPackage.claimed_by == claimer.id,
+            KeyPackage.claimed_at > clock.now() - timedelta(days=1),
+        )
+    )
+    if (recent or 0) >= MAX_CLAIMS_PER_PEER_PER_DAY:
+        raise Conflict("Too many tries to set up this chat today; try again tomorrow", code="too_many_claims")
     package = db.scalars(
         select(KeyPackage)
         .where(KeyPackage.user_id == target_user_id, KeyPackage.claimed_at.is_(None))

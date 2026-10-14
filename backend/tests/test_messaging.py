@@ -36,6 +36,7 @@ def start_chat(db, alice, bob, a_dev):
 
 def test_key_packages_are_claimed_once_each(db, pair):
     alice, bob, _, b_dev = pair
+    chat.open_direct(db, alice, bob.id, None)
     first = chat.claim_key_package(db, alice, bob.id)
     second = chat.claim_key_package(db, alice, bob.id)
     db.commit()
@@ -55,6 +56,8 @@ def test_cannot_claim_own_or_overfill(db, pair):
 
 def test_concurrent_claims_never_share_a_key_package(db, pair):
     alice, bob, _, _ = pair
+    chat.open_direct(db, alice, bob.id, None)
+    db.commit()
     from app.db import get_sessionmaker
 
     got: list[bytes] = []
@@ -199,6 +202,7 @@ def test_expiry_setting(fake_clock, db, pair):
 
 def test_new_device_retires_old_key_packages(db, pair):
     alice, bob, _, b_dev = pair
+    chat.open_direct(db, alice, bob.id, None)
     assert chat.unclaimed_count(db, b_dev.id) == 2
     new_dev = chat.register_device(db, bob, "reinstalled")  # old keys were lost with the old install
     db.commit()
@@ -207,3 +211,20 @@ def test_new_device_retires_old_key_packages(db, pair):
         chat.claim_key_package(db, alice, bob.id)
     chat.upload_key_packages(db, bob, new_dev.id, [b64(b"fresh")])
     assert chat.claim_key_package(db, alice, bob.id).data == b"fresh"
+
+
+def test_claims_need_a_pending_chat_and_are_capped(db, pair):
+    alice, bob, a_dev, b_dev = pair
+    with pytest.raises(Conflict, match="Open the chat first"):
+        chat.claim_key_package(db, alice, bob.id)  # no chat: cannot drain Bob's keys
+    chat.upload_key_packages(db, bob, b_dev.id, [b64(b"kp-%d" % i) for i in range(10)])
+    chat.open_direct(db, alice, bob.id, None)
+    for _ in range(5):
+        chat.claim_key_package(db, alice, bob.id)
+    with pytest.raises(Conflict, match="Too many tries"):
+        chat.claim_key_package(db, alice, bob.id)
+    db.rollback()
+    conv = start_chat(db, alice, bob, a_dev)  # once set up, no more claims for this pair
+    assert conv.mls_ready_by == alice.id
+    with pytest.raises(Conflict, match="already set up"):
+        chat.claim_key_package(db, bob, alice.id)

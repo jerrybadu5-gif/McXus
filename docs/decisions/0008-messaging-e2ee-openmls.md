@@ -13,6 +13,8 @@ files so the app builds without Rust. We do not write any cryptography ourselves
 2. A opens a chat with B (by phone number, or **Chat** on a listing). A claims one of B's KeyPackages
    (`SELECT … FOR UPDATE SKIP LOCKED`, so two claims never get the same one), creates the MLS group locally and
    uploads the **Welcome**. The group id is `mcxus:<conversation>:<random>`.
+   Claims are only allowed for a chat that exists and is not yet set up, at most 5 a day per pair, so nobody
+   can drain another person's KeyPackages (which would stop others from starting chats with them).
 3. Only the first Welcome is accepted (`UPDATE … WHERE mls_ready_by IS NULL`). If both phones start at the same
    moment, the slower one gets `409 already_initialised`, waits, and joins from the winner's Welcome (tested).
 4. Messages are MLS application messages. The server stores ciphertext only, delivers it with a long-poll
