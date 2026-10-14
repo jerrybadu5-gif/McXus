@@ -22,7 +22,7 @@ jobs:
     env:
       MCXUS_TEST_DATABASE_URL: postgresql+psycopg://mcxus:mcxus@localhost:5432/mcxus_test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
@@ -37,5 +37,5 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: docker compose build
