@@ -18,6 +18,7 @@ payments protected by escrow.
 | Marketplace (M2) | Listings with up to 5 photos, PNG provinces/districts/suburbs, search, first-buyer-to-pay stock reservation, ratings, seller trust badges, reports and moderation |
 | Messaging (M3) | End-to-end encrypted 1:1 chats (OpenMLS / MLS RFC 9420): the server relays and stores ciphertext only, 30-day expiry, long-poll delivery; chat with a seller from any listing |
 | Android app (M3) | Jetpack Compose: Chats · Discover · Market · Wallet · Me, escrow order cards in chat, handover QR + PIN |
+| Places (M3.1) | Meet-up / delivery points: GPS (current location or map) first, landmark second; on listings, orders and in chat (ADR 0009) |
 
 1 Star = K1. All amounts are exact decimals, sent and returned as strings (`"150.00"`).
 
@@ -63,8 +64,8 @@ backend/app/
   api/                 HTTP routes and request/response schemas
   jobs.py              timer worker
   cli.py               make-admin, seed-demo, dev-token
-backend/migrations/    Alembic (0001 money core; 0002 marketplace + PNG seed data; 0003 messaging)
-backend/tests/         100 tests against real PostgreSQL
+backend/migrations/    Alembic (0001 money core; 0002 marketplace + PNG seed data; 0003 messaging; 0004 locations)
+backend/tests/         105 tests against real PostgreSQL
 crypto/                Rust: OpenMLS wrapper + Kotlin bindings (UniFFI) for the app
 android/               Kotlin + Jetpack Compose app
 .vscode/tasks.json     build / install / test on a USB phone from VS Code

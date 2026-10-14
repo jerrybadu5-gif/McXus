@@ -61,6 +61,8 @@ import pg.mcxus.app.chat.Readiness
 import pg.mcxus.app.ui.Avatar
 import pg.mcxus.app.ui.Ic
 import pg.mcxus.app.ui.Loading
+import pg.mcxus.app.ui.PlaceField
+import pg.mcxus.app.util.Place
 import pg.mcxus.app.ui.RemoteImage
 import pg.mcxus.app.ui.StarLogo
 import pg.mcxus.app.ui.objects
@@ -83,6 +85,8 @@ fun ChatScreen(nav: NavHostController, conversationId: String) {
     var menu by remember { mutableStateOf(false) }
     var safety by remember { mutableStateOf<String?>(null) }
     var sharing by remember { mutableStateOf(false) }
+    var attach by remember { mutableStateOf(false) }
+    var sharingPlace by remember { mutableStateOf(false) }
     val messages = remember(version, conversationId) { engine.messages(conversationId) }
     val list = rememberLazyListState()
 
@@ -179,7 +183,23 @@ fun ChatScreen(nav: NavHostController, conversationId: String) {
                 Modifier.weight(1f).clip(RoundedCornerShape(24.dp)).background(Color.White).padding(start = 4.dp, end = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = { sharing = true }) { Icon(Ic.Plus, "Share one of my listings", tint = Mx.Muted) }
+                Box {
+                    IconButton(onClick = { attach = true }, modifier = Modifier.testTag("attach")) {
+                        Icon(Ic.Plus, "Share a listing or a location", tint = Mx.Muted)
+                    }
+                    DropdownMenu(attach, onDismissRequest = { attach = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Share a location (meet / deliver here)") },
+                            leadingIcon = { Icon(Ic.Pin, null, tint = Mx.Blue) },
+                            onClick = { attach = false; sharingPlace = true },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Share one of my listings") },
+                            leadingIcon = { Icon(Ic.Market, null, tint = Mx.Blue) },
+                            onClick = { attach = false; sharing = true },
+                        )
+                    }
+                }
                 BasicTextField(
                     value = draft,
                     onValueChange = { draft = it.take(4000) },
@@ -225,6 +245,25 @@ fun ChatScreen(nav: NavHostController, conversationId: String) {
             },
         )
     }
+    if (sharingPlace) {
+        var draft by remember { mutableStateOf(Place()) }
+        AlertDialog(
+            onDismissRequest = { sharingPlace = false },
+            title = { Text("Share a location") },
+            text = {
+                PlaceField("Meet or deliver here", draft, { draft = it }, requirePng = false,
+                    hint = "Only you and ${conv?.peer?.name ?: "this person"} can see it (end-to-end encrypted).")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (draft.isEmpty) return@TextButton app.say("Use your location, the map, or type a landmark")
+                    sharingPlace = false
+                    send(Payload.location(draft))
+                }, modifier = Modifier.testTag("send-location")) { Text("Send") }
+            },
+            dismissButton = { TextButton(onClick = { sharingPlace = false }) { Text("Cancel") } },
+        )
+    }
     if (sharing) ShareListingDialog(onDismiss = { sharing = false }) { item ->
         sharing = false
         val thumb = item.optJSONArray("photos")?.objects()?.firstOrNull()?.str("thumb_url") ?: ""
@@ -262,6 +301,32 @@ private fun MessageItem(m: LocalMessage, nav: NavHostController, version: Long) 
             }
         }
         "order" -> Side(m.mine) { OrderCard(p, nav, version) }
+        "location" -> Side(m.mine) {
+            val place = Place.from(p) ?: Place(address = "Location")
+            val context = androidx.compose.ui.platform.LocalContext.current
+            Column(
+                Modifier.width(260.dp).clip(RoundedCornerShape(16.dp)).background(Color.White).border(1.dp, Mx.Field, RoundedCornerShape(16.dp)),
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().background(Mx.Navy).padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Ic.PinSolid, null, tint = Mx.Gold, modifier = Modifier.size(22.dp))
+                    Text("  " + if (m.mine) "You shared a place" else "Meet / deliver here", color = Color.White,
+                        fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                }
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(place.address.ifBlank { "GPS point" }, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    if (place.hasPoint) Text(place.coordinates(), fontSize = 12.sp, color = Mx.Muted)
+                    Box(
+                        Modifier.padding(top = 6.dp).fillMaxWidth().height(40.dp).clip(RoundedCornerShape(12.dp)).background(Mx.Blue)
+                            .clickable { pg.mcxus.app.util.Places.openInMaps(context, place, place.address.ifBlank { "Meet here" }) },
+                        contentAlignment = Alignment.Center,
+                    ) { Text("Directions", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp) }
+                    Text(Format.clock(m.at), fontSize = 11.sp, color = Mx.Muted, modifier = Modifier.align(Alignment.End))
+                }
+            }
+        }
         else -> Side(m.mine) {
             val shape = if (m.mine) RoundedCornerShape(16.dp, 16.dp, 4.dp, 16.dp) else RoundedCornerShape(16.dp, 16.dp, 16.dp, 4.dp)
             Column(

@@ -47,6 +47,8 @@ import pg.mcxus.app.ui.Header
 import pg.mcxus.app.ui.Ic
 import pg.mcxus.app.ui.Note
 import pg.mcxus.app.ui.Pill
+import pg.mcxus.app.ui.PlaceField
+import pg.mcxus.app.util.Place
 import pg.mcxus.app.ui.objects
 import pg.mcxus.app.ui.rememberLoader
 import pg.mcxus.app.ui.str
@@ -72,6 +74,7 @@ fun SellScreen(nav: NavHostController) {
     var suburb by remember { mutableStateOf<Choice?>(null) }
     var busy by remember { mutableStateOf(false) }
     var created by remember { mutableStateOf<String?>(null) }
+    var meetPoint by remember { mutableStateOf(Place()) }
 
     val categories = rememberLoader(Unit) {
         app.api.list("/v1/categories").objects().flatMap { parent ->
@@ -118,6 +121,13 @@ fun SellScreen(nav: NavHostController) {
                     Pill(Format.delivery(d), d in delivery, { delivery = if (d in delivery && delivery.size > 1) delivery - d else delivery + d })
                 }
             }
+            val meets = delivery.any { it == "meetup" || it == "pickup" }
+            PlaceField(
+                if (meets) "Meet-up / pickup point" else "Where you send from (optional)",
+                meetPoint, { meetPoint = it },
+                hint = if (meets) "Buyers get directions to this point. Pick a busy public place, not your home."
+                else "Helps buyers and couriers see the distance. Only shown as you set it.",
+            )
             Picker("Province", province, provinces.data.orEmpty()) { province = it; district = null; suburb = null }
             if (districts.data.orEmpty().isNotEmpty()) Picker("District (optional)", district, districts.data.orEmpty()) { district = it; suburb = null }
             if (suburbs.data.orEmpty().isNotEmpty()) Picker("Suburb (optional)", suburb, suburbs.data.orEmpty()) { suburb = it }
@@ -136,6 +146,8 @@ fun SellScreen(nav: NavHostController) {
                         amount == null -> app.say("Please enter a price like 120 or 12.50")
                         category == null -> app.say("Please choose a category")
                         province == null -> app.say("Please choose a province")
+                        delivery.any { it == "meetup" || it == "pickup" } && meetPoint.isEmpty ->
+                            app.say("Set the meet-up point: use your location or the map, and add a landmark")
                         else -> {
                             busy = true
                             app.launch(onDone = { busy = false }) {
@@ -147,6 +159,9 @@ fun SellScreen(nav: NavHostController) {
                                     .put("province_id", province!!.id)
                                     .put("district_id", district?.id ?: JSONObject.NULL)
                                     .put("suburb_id", suburb?.id ?: JSONObject.NULL)
+                                    .put("latitude", meetPoint.latitude ?: JSONObject.NULL)
+                                    .put("longitude", meetPoint.longitude ?: JSONObject.NULL)
+                                    .put("meetup_address", meetPoint.address.trim())
                                 created = app.api.post("/v1/listings", body).getString("id")
                             }
                         }

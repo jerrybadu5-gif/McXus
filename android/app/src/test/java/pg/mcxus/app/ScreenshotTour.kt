@@ -34,6 +34,8 @@ import pg.mcxus.app.ui.screens.SellScreen
 import pg.mcxus.app.ui.screens.SignInScreen
 import pg.mcxus.app.ui.theme.McXusTheme
 import java.io.File
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import kotlin.random.Random
 
 /**
@@ -82,7 +84,8 @@ class ScreenshotTour {
                 .put("province_id", province).put("condition", "new").put("description", "Made in Goroka. Strong strap, bright colours."))
             sellerApi.post("/v1/listings", JSONObject().put("title", "Solar lamp with phone charger").put("price", "120.00").put("quantity", 2)
                 .put("category_id", cat).put("province_id", province).put("condition", "new")
-                .put("delivery_options", org.json.JSONArray(listOf("meetup", "pickup")))
+                .put("delivery_options", org.json.JSONArray(listOf("meetup", "pickup", "courier")))
+                .put("latitude", "-6.72900").put("longitude", "146.99700").put("meetup_address", "Eriku market gate, near BSP ATM")
                 .put("description", "Two bright bulbs and a 10 W panel. Charges two phones at once. Pickup at Eriku market gate after 3 pm."))
                 .getString("id")
         }
@@ -107,11 +110,14 @@ class ScreenshotTour {
             buyer.send(conv, Payload.listing(listingId, "Solar lamp with phone charger", "120.00", ""))
             withTimeout(30_000) { while (seller.messages(conv).isEmpty()) delay(100) }
             seller.send(conv, Payload.text("Yes, the lamp is still available. K120 with phone charger."))
-            val order = app.api.post("/v1/listings/$listingId/buy", JSONObject().put("quantity", 1), idempotent = true)
+            val order = app.api.post("/v1/listings/$listingId/buy", JSONObject().put("quantity", 1)
+                .put("delivery", JSONObject().put("method", "meetup")), idempotent = true)
             val orderId = order.getString("id")
             app.session.pins[orderId] = app.api.post("/v1/orders/$orderId/pay", idempotent = true).getString("handover_pin")
             buyer.send(conv, Payload.order(orderId, "Solar lamp with phone charger", "120.00"))
             buyer.send(conv, Payload.text("Can I collect at Eriku after 3pm?"))
+            seller.send(conv, Payload.location(pg.mcxus.app.util.Place.of(-6.729, 146.997, "Eriku market gate, near BSP ATM")))
+            withTimeout(30_000) { while (buyer.messages(conv).none { it.payload.contains("location") }) delay(100) }
             withTimeout(30_000) { while (buyer.messages(conv).none { !it.mine }) delay(100) }
             conv to orderId
         }
@@ -123,7 +129,7 @@ class ScreenshotTour {
             }
         }
         val dir = File(out!!).apply { mkdirs() }
-        listOf("signin", "chats", "chat", "discover", "market", "listing", "sell", "wallet", "order", "me").forEachIndexed { i, name ->
+        listOf("signin", "chats", "chat", "discover", "market", "listing", "sell", "wallet", "order", "me", "place", "map").forEachIndexed { i, name ->
             screen = name
             compose.waitForIdle()
             Thread.sleep(2500) // let network loads finish
@@ -151,6 +157,10 @@ class ScreenshotTour {
             "listing" -> ListingScreen(nav, listingId)
             "sell" -> SellScreen(nav)
             "order" -> OrderScreen(nav, orderId)
+            "place" -> androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.padding(16.dp)) {
+                pg.mcxus.app.ui.PlaceField("Meet-up / pickup point", pg.mcxus.app.util.Place.of(-6.729, 146.997, "Eriku market gate"), {})
+            }
+            "map" -> pg.mcxus.app.ui.MapPicker(pg.mcxus.app.util.Place.of(-6.729, 146.997), {}, { _, _ -> })
         }
     }
 }

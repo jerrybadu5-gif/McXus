@@ -164,6 +164,11 @@ class Order(TimestampMixin, Base):
     listing_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("listings.id"))  # None = custom order
     quantity: Mapped[int] = mapped_column(SmallInteger, default=1)
     stock_reserved: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Where the item changes hands: GPS point first, address/landmark as the second identifier (M3.1).
+    delivery_method: Mapped[str | None] = mapped_column(String(20))
+    delivery_latitude: Mapped[Decimal | None] = mapped_column(Numeric(8, 5))
+    delivery_longitude: Mapped[Decimal | None] = mapped_column(Numeric(8, 5))
+    delivery_address: Mapped[str] = mapped_column(String(200), default="", server_default="")
     status: Mapped[str] = mapped_column(String(20), default="CREATED")
     handover_pin_hash: Mapped[str | None] = mapped_column(String(64))
     handover_attempts: Mapped[int] = mapped_column(SmallInteger, default=0)
@@ -324,8 +329,11 @@ class Listing(TimestampMixin, Base):
     province_id: Mapped[int] = mapped_column(ForeignKey("locations.id"))
     district_id: Mapped[int | None] = mapped_column(ForeignKey("locations.id"))
     suburb_id: Mapped[int | None] = mapped_column(ForeignKey("locations.id"))
-    latitude: Mapped[Decimal | None] = mapped_column(Numeric(8, 5))
+    latitude: Mapped[Decimal | None] = mapped_column(Numeric(8, 5))  # meet-up / pickup point chosen by the seller
     longitude: Mapped[Decimal | None] = mapped_column(Numeric(8, 5))
+    meetup_address: Mapped[str] = mapped_column(
+        String(200), default="", server_default=""
+    )  # landmark, e.g. "Eriku market gate"
     status: Mapped[str] = mapped_column(String(16), default="active")
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Only when the person taps "Use my current location" (meet-up point, delivery place, share in chat). -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <!-- Only needed on Android 8-9 to save a camera photo before uploading it. -->
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"

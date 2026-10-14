@@ -57,6 +57,9 @@ import pg.mcxus.app.ui.Ic
 import pg.mcxus.app.ui.LineButton
 import pg.mcxus.app.ui.Loading
 import pg.mcxus.app.ui.Pill
+import pg.mcxus.app.ui.PlaceCard
+import pg.mcxus.app.ui.PlaceField
+import pg.mcxus.app.util.Place
 import pg.mcxus.app.ui.objects
 import pg.mcxus.app.ui.rememberLoader
 import pg.mcxus.app.ui.str
@@ -112,6 +115,7 @@ fun OrderScreen(nav: NavHostController, orderId: String) {
     var rating by remember { mutableIntStateOf(5) }
     var comment by remember { mutableStateOf("") }
     var rated by remember { mutableStateOf(false) }
+    var editingPlace by remember { mutableStateOf<Place?>(null) }
 
     fun act(action: String, body: JSONObject? = null) {
         busy = true
@@ -160,6 +164,24 @@ fun OrderScreen(nav: NavHostController, orderId: String) {
             if (o.str("closed_at").isNotEmpty()) {
                 Text("Fee ${Format.kina(o.str("fee_charged"))} · buyer refunded ${Format.kina(o.str("buyer_refunded"))} · seller paid ${Format.kina(o.str("seller_paid"))}",
                     fontSize = 12.sp, color = Mx.Muted, textAlign = TextAlign.Center)
+            }
+
+            val place = Place.from(o, "delivery_")
+            val open = o.str("closed_at").isEmpty()
+            val method = o.str("delivery_method").ifEmpty { "meetup" }
+            val placeTitle = when (method) {
+                "seller_delivers" -> "Seller delivers to"
+                "courier" -> "Courier delivers to"
+                "pickup" -> "Pick up at"
+                else -> "Meet at"
+            }
+            if (place != null) {
+                PlaceCard(placeTitle, place, action = if (open) ({
+                    Text("Change place", color = Mx.Blue, fontWeight = FontWeight.Bold, fontSize = 13.sp,
+                        modifier = Modifier.padding(top = 4.dp).clickable { editingPlace = place }.testTag("change-place"))
+                }) else null)
+            } else if (open) {
+                LineButton("Set the handover place", { editingPlace = Place() }, Modifier.fillMaxWidth())
             }
 
             if (!asSeller) {
@@ -247,6 +269,27 @@ fun OrderScreen(nav: NavHostController, orderId: String) {
             text = { Text(text) },
             confirmButton = { TextButton(onClick = { confirm = null; run() }) { Text("Yes") } },
             dismissButton = { TextButton(onClick = { confirm = null }) { Text("No") } },
+        )
+    }
+    editingPlace?.let { start ->
+        var draft by remember(start) { mutableStateOf(start) }
+        AlertDialog(
+            onDismissRequest = { editingPlace = null },
+            title = { Text("Where to hand over") },
+            text = { PlaceField("Handover place", draft, { draft = it }, hint = "The other person sees the change on this order.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (draft.isEmpty) return@TextButton app.say("Set a GPS point or type an address")
+                    editingPlace = null
+                    busy = true
+                    app.launch(onDone = { busy = false }) {
+                        app.api.post("/v1/orders/$orderId/delivery-location", draft.toJson())
+                        app.say("Handover place updated")
+                        refresh++
+                    }
+                }) { Text("Save") }
+            },
+            dismissButton = { TextButton(onClick = { editingPlace = null }) { Text("Cancel") } },
         )
     }
     if (disputing) {

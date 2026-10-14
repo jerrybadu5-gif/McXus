@@ -1,4 +1,4 @@
-# McXus Android app (0.2.0-m3)
+# McXus Android app (0.3.0-m3)
 
 Native Kotlin + Jetpack Compose (Material 3), McXus design: deep Pacific blue, kina gold, Plus Jakarta Sans.
 Android 8.0+ (minSdk 26), targets Android 15 (API 35). **Sandbox: test Stars only.**
@@ -9,6 +9,8 @@ Android 8.0+ (minSdk 26), targets Android 15 (API 35). **Sandbox: test Stars onl
 - **Discover** — feed of new listings with seller stories (posts, follows and Shorts videos arrive in M5).
 - **Market** — search, categories, province filter, listing pages with photo pager, **Buy with Stars**
   (first buyer to pay gets it); the order card is sent to the seller in the encrypted chat.
+- **Meet-up & delivery places** — GPS first (*Use my location* or *Set on map*, OpenStreetMap), landmark second;
+  on listings, orders (change until closed) and shareable in chat; **Directions** open the phone's maps app.
 - **Wallet** — balance (tap the eye to hide), limits, sandbox top-up, withdraw request, statement.
 - **Orders / handover** — buyer sees QR + 6-digit PIN; seller accepts/rejects, enters the PIN; dispute, rate.
 - **Me** — profile and store name, my listings, sell, server address, sign out.

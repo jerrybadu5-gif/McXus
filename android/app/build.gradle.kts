@@ -12,8 +12,8 @@ android {
         applicationId = "pg.mcxus.app"
         minSdk = 26 // Android 8.0
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0-m3"
+        versionCode = 3
+        versionName = "0.3.0-m3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk {
             // Native encryption library (OpenMLS) is built for these phone CPU types.
@@ -82,6 +82,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("com.google.zxing:core:3.5.3") // QR code for the handover PIN
     implementation("net.java.dev.jna:jna:5.15.0@aar") // used by the generated OpenMLS bindings
+    implementation("org.osmdroid:osmdroid-android:6.1.20") // OpenStreetMap map to set a meet-up / delivery point (Apache-2.0)
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 

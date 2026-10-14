@@ -87,3 +87,9 @@ Welcomes are visible only to their recipient. The worker deletes expired message
 API: `POST /v1/devices`, `POST /v1/keys`, `GET /v1/keys/count`, `POST /v1/keys/claim`, `POST /v1/users/lookup`,
 `POST|GET /v1/conversations`, `POST /v1/conversations/{id}/welcome`, `POST /v1/conversations/{id}/messages`,
 `GET /v1/messages/sync?after=&wait=` (long-poll, max 25 s). Phone side: `chat/ChatEngine.kt`. Details: ADR 0008.
+
+## Meet-up and delivery location (M3.1)
+
+`listings.latitude/longitude/meetup_address` (seller's public meet-up point) and
+`orders.delivery_method/delivery_latitude/delivery_longitude/delivery_address` (visible to buyer and seller).
+GPS first, landmark second; points must be inside PNG. Changes are logged as order events. See ADR 0009.

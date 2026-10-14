@@ -60,6 +60,10 @@ import pg.mcxus.app.ui.Ic
 import pg.mcxus.app.ui.LineButton
 import pg.mcxus.app.ui.Loading
 import pg.mcxus.app.ui.PhotoButtons
+import pg.mcxus.app.ui.Pill
+import pg.mcxus.app.ui.PlaceCard
+import pg.mcxus.app.ui.PlaceField
+import pg.mcxus.app.util.Place
 import pg.mcxus.app.ui.RemoteImage
 import pg.mcxus.app.ui.RoundIcon
 import pg.mcxus.app.ui.SellerBadge
@@ -179,6 +183,9 @@ fun ListingScreen(nav: NavHostController, listingId: String) {
                     }
                     SellerBadge(seller.str("badge"))
                 }
+                Place.from(item.optJSONObject("meetup"))?.let { meet ->
+                    PlaceCard("Meet-up / pickup point", meet)
+                }
                 if (item.str("description").isNotEmpty()) {
                     Text(item.str("description"), fontSize = 14.sp, lineHeight = 21.sp, color = Mx.Body)
                 }
@@ -220,11 +227,13 @@ fun ListingScreen(nav: NavHostController, listingId: String) {
         }
     }
 
-    if (buying) BuyDialog(item, onDismiss = { buying = false }) { qty ->
+    if (buying) BuyDialog(item, onDismiss = { buying = false }) { qty, delivery ->
         buying = false
         busy = true
         app.launch(onDone = { busy = false }) {
-            val order = app.api.post("/v1/listings/$listingId/buy", JSONObject().put("quantity", qty), idempotent = true)
+            val order = app.api.post(
+                "/v1/listings/$listingId/buy", JSONObject().put("quantity", qty).put("delivery", delivery), idempotent = true,
+            )
             val orderId = order.getString("id")
             val paid = app.api.post("/v1/orders/$orderId/pay", idempotent = true)
             app.session.pins[orderId] = paid.str("handover_pin")
@@ -245,34 +254,79 @@ fun ListingScreen(nav: NavHostController, listingId: String) {
     }
 }
 
+/** Quantity, how the item reaches the buyer, and where: GPS point first, landmark/address second. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun BuyDialog(item: JSONObject, onDismiss: () -> Unit, onConfirm: (Int) -> Unit) {
+private fun BuyDialog(item: JSONObject, onDismiss: () -> Unit, onConfirm: (Int, JSONObject) -> Unit) {
+    val app = LocalApp.current
     var qty by remember { mutableIntStateOf(1) }
+    val options = item.getJSONArray("delivery_options").let { d -> (0 until d.length()).map { d.getString(it) } }
+    var method by remember { mutableStateOf(options.firstOrNull() ?: "meetup") }
+    val sellerPoint = Place.from(item.optJSONObject("meetup"))
+    var place by remember { mutableStateOf(Place()) }
+    var otherPlace by remember { mutableStateOf(false) }
+    val toBuyer = method == "seller_delivers" || method == "courier"
     val max = item.optInt("quantity_available", 1)
     val total = java.math.BigDecimal(item.str("price")).multiply(java.math.BigDecimal(qty)).setScale(2).toPlainString()
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Buy with Stars") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(item.str("title"), fontWeight = FontWeight.Bold)
-                if (max > 1) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        TextButton(onClick = { if (qty > 1) qty-- }) { Text("–", fontSize = 22.sp) }
-                        Text("$qty", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                        TextButton(onClick = { if (qty < max) qty++ }) { Text("+", fontSize = 22.sp) }
-                    }
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+        Column(
+            Modifier.fillMaxWidth().padding(16.dp).clip(RoundedCornerShape(24.dp)).background(Mx.Bg)
+                .verticalScroll(rememberScrollState()).padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text("Buy with Stars", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+            Text(item.str("title"), fontWeight = FontWeight.Bold)
+            if (max > 1) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Quantity", modifier = Modifier.weight(1f))
+                    TextButton(onClick = { if (qty > 1) qty-- }) { Text("–", fontSize = 22.sp) }
+                    Text("$qty", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    TextButton(onClick = { if (qty < max) qty++ }) { Text("+", fontSize = 22.sp) }
                 }
-                Text("Total ${Format.price(total)}", fontWeight = FontWeight.ExtraBold, color = Mx.Blue)
-                Text(
-                    "Your Stars are held in escrow. The seller has 20 minutes to accept. Cancelling after you pay costs 5% (minimum K2).",
-                    fontSize = 13.sp, color = Mx.Muted,
-                )
             }
-        },
-        confirmButton = { TextButton(onClick = { onConfirm(qty) }, modifier = Modifier.testTag("confirm-buy")) { Text("Pay ${Format.kina(total)}") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
+            Text("How do you get it?", fontWeight = FontWeight.Bold)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                options.forEach { o -> Pill(Format.delivery(o), method == o, { method = o }) }
+            }
+            when {
+                toBuyer -> PlaceField(
+                    "Deliver to", place, { place = it },
+                    hint = "The seller or courier gets directions to this point. Add a landmark they can ask for.",
+                )
+                otherPlace || sellerPoint == null -> PlaceField(
+                    "Suggest a meeting place", place, { place = it },
+                    hint = if (sellerPoint == null) "The seller did not set a point. Suggest a busy public place." else "The seller sees your suggestion on the order.",
+                )
+                else -> {
+                    PlaceCard("Seller's meet-up point", sellerPoint)
+                    TextButton(onClick = { otherPlace = true }) { Text("Suggest another place") }
+                }
+            }
+            Text("Total ${Format.price(total)}", fontWeight = FontWeight.ExtraBold, color = Mx.Blue)
+            Text(
+                "Your Stars are held in escrow. The seller has 20 minutes to accept. Cancelling after you pay costs 5% (minimum K2).",
+                fontSize = 13.sp, color = Mx.Muted,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                LineButton("Cancel", onDismiss, Modifier.weight(1f))
+                BigButton("Pay ${Format.kina(total)}", modifier = Modifier.weight(1.4f).testTag("confirm-buy"), onClick = {
+                    val needsPlace = toBuyer || sellerPoint == null && method == "meetup"
+                    when {
+                        needsPlace && place.isEmpty -> app.say(if (toBuyer) "Set where to deliver: your location, the map, or an address" else "Suggest where to meet")
+                        place.hasPoint && !place.inPng -> app.say("That point is outside Papua New Guinea")
+                        else -> {
+                            val delivery = JSONObject().put("method", method)
+                            if (!place.isEmpty) {
+                                delivery.put("latitude", place.latitude ?: JSONObject.NULL).put("longitude", place.longitude ?: JSONObject.NULL)
+                                    .put("address", place.address.trim())
+                            }
+                            onConfirm(qty, delivery)
+                        }
+                    }
+                })
+            }
+        }
+    }
 }
 
 @Composable

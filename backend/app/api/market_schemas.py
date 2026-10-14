@@ -9,6 +9,30 @@ from pydantic import BaseModel, ConfigDict, Field
 
 Price = Annotated[Decimal, Field(gt=0, max_digits=14, decimal_places=2, description="PGK, e.g. 150.00")]
 Delivery = Literal["meetup", "pickup", "seller_delivers", "courier"]
+# PNG and its islands lie between about 0-12°S and 140-160°E; 5 decimals ≈ 1 m.
+Latitude = Annotated[Decimal, Field(ge=-12, le=0, decimal_places=5)]
+Longitude = Annotated[Decimal, Field(ge=140, le=160, decimal_places=5)]
+
+
+class PlaceOut(BaseModel):
+    latitude: Decimal | None
+    longitude: Decimal | None
+    address: str
+
+
+class DeliveryIn(BaseModel):
+    method: Delivery
+    latitude: Latitude | None = None
+    longitude: Longitude | None = None
+    address: str = Field(default="", max_length=200, examples=["Blue house behind Eriku church"])
+
+
+class DeliveryPlaceIn(BaseModel):
+    latitude: Latitude | None = None
+    longitude: Longitude | None = None
+    address: str = Field(default="", max_length=200)
+
+
 Condition = Literal["new", "like_new", "good", "fair", "not_applicable"]
 
 
@@ -39,8 +63,9 @@ class ListingIn(BaseModel):
     province_id: int
     district_id: int | None = None
     suburb_id: int | None = None
-    latitude: Annotated[Decimal, Field(ge=-12, le=0, decimal_places=5)] | None = None  # PNG lies 0-12°S
-    longitude: Annotated[Decimal, Field(ge=140, le=160, decimal_places=5)] | None = None
+    latitude: Latitude | None = Field(default=None, description="Meet-up / pickup point (a public place, not home)")
+    longitude: Longitude | None = None
+    meetup_address: str = Field(default="", max_length=200, examples=["Eriku market gate, Lae"])
 
 
 class StatusIn(BaseModel):
@@ -77,6 +102,7 @@ class ListingOut(BaseModel):
     district: str | None
     suburb: str | None
     location_ids: dict[str, int | None]
+    meetup: PlaceOut | None = Field(description="Seller's meet-up / pickup point: GPS first, address second")
     status: str
     photos: list[PhotoOut]
     seller: SellerCard
@@ -85,6 +111,9 @@ class ListingOut(BaseModel):
 
 class BuyIn(BaseModel):
     quantity: int = Field(default=1, ge=1, le=10000)
+    delivery: DeliveryIn | None = Field(
+        default=None, description="Omit to use the seller's first option and meet-up point"
+    )
 
 
 class ReportIn(BaseModel):

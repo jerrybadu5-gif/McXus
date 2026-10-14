@@ -7,6 +7,7 @@ import org.json.JSONObject
  *  {"t":"text","body":"…"}
  *  {"t":"listing","id":"…","title":"…","price":"120.00","thumb":"/media/…"}
  *  {"t":"order","id":"…","title":"…","amount":"120.00"}
+ *  {"t":"location","latitude":"-6.72900","longitude":"146.99700","address":"Eriku market gate"}
  *  {"t":"system","body":"…"}   (written locally only, never sent)
  */
 object Payload {
@@ -17,6 +18,9 @@ object Payload {
 
     fun order(id: String, title: String, amount: String): String =
         JSONObject().put("t", "order").put("id", id).put("title", title).put("amount", amount).toString()
+
+    /** A meeting / delivery point shared in the chat (end-to-end encrypted: the server never sees it). */
+    fun location(place: pg.mcxus.app.util.Place): String = place.toJson().put("t", "location").toString()
 
     fun system(body: String): String = JSONObject().put("t", "system").put("body", body).toString()
 
@@ -32,6 +36,7 @@ object Payload {
         return when (p.optString("t")) {
             "listing" -> "🛍 " + p.optString("title")
             "order" -> "★ Order · K" + p.optString("amount")
+            "location" -> "📍 " + p.optString("address").ifBlank { "Location" }
             else -> p.optString("body")
         }
     }

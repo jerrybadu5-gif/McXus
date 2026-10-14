@@ -70,6 +70,9 @@ object Ic {
     val DoubleCheck = line("read", "m2 13 4 4 8-9M10 16l1 1 9-10", width = 2.2f)
     val Mic = line("mic", rect(9f, 3f, 6f, 11f, 3f), "M5 11a7 7 0 0 0 14 0M12 18v3")
 
+    val PinSolid = solid("pin", "M12 2a8 8 0 0 0-8 8c0 5.6 7 11.6 7.3 11.9a1 1 0 0 0 1.4 0C13 21.6 20 15.6 20 10a8 8 0 0 0-8-8Zm0 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z")
+    val Locate = line("locate", circle(12f, 12f, 7f), circle(12f, 12f, 2.5f), "M12 2v3M12 19v3M2 12h3M19 12h3")
+
     /** The eight-point McXus Star (also the currency mark for Stars). Fill colour comes from the caller. */
     val Star = solid("star", "M54,8 L62,40 L96,32 L71,54 L96,76 L62,68 L54,100 L46,68 L12,76 L37,54 L12,32 L46,40 Z", size = 108f)
 }

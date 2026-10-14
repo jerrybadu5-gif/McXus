@@ -20,3 +20,4 @@ android/local.properties
 
 # Rust (encryption library)
 crypto/target/
+.idea/

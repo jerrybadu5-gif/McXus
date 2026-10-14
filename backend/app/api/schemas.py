@@ -91,6 +91,10 @@ class OrderOut(BaseModel):
     currency: str
     listing_id: uuid.UUID | None
     quantity: int
+    delivery_method: str | None = None
+    delivery_latitude: Decimal | None = None
+    delivery_longitude: Decimal | None = None
+    delivery_address: str = ""
     status: str
     funded_at: datetime | None
     accept_deadline: datetime | None
