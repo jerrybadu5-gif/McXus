@@ -23,7 +23,7 @@ jobs:
       MCXUS_TEST_DATABASE_URL: postgresql+psycopg://mcxus:mcxus@localhost:5432/mcxus_test
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
