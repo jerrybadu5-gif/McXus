@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -43,6 +44,7 @@ import pg.mcxus.app.LocalApp
 import pg.mcxus.app.Routes
 import pg.mcxus.app.chat.Conversation
 import pg.mcxus.app.ui.Avatar
+import pg.mcxus.app.ui.ChatAvatar
 import pg.mcxus.app.ui.Empty
 import pg.mcxus.app.ui.Field
 import pg.mcxus.app.ui.Ic
@@ -63,14 +65,16 @@ fun ChatsTab(nav: NavHostController) {
     var filter by rememberSaveable { mutableStateOf("all") }
     var searching by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
+    var newMenu by remember { mutableStateOf(false) }
 
     val unreadChats = conversations.count { it.unread > 0 }
     val shown = conversations.filter {
         when (filter) {
             "unread" -> it.unread > 0
             "sellers" -> it.listingId != null
+            "groups" -> it.isGroup
             else -> true
-        } && (query.isBlank() || it.peer.name.contains(query.trim(), ignoreCase = true))
+        } && (query.isBlank() || it.name.contains(query.trim(), ignoreCase = true))
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -115,9 +119,9 @@ fun ChatsTab(nav: NavHostController) {
                     ) {
                         Box(
                             Modifier.size(58.dp).border(3.dp, if (c.unread > 0) Mx.Gold else Mx.ChipLine, CircleShape).padding(5.dp),
-                        ) { Avatar(c.peer.name, 48.dp, key = c.peer.id) }
+                        ) { ChatAvatar(c, 48.dp) }
                         Text(
-                            c.peer.name, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            c.name, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.padding(top = 6.dp),
                         )
                     }
@@ -128,6 +132,7 @@ fun ChatsTab(nav: NavHostController) {
                 Pill("All", filter == "all", { filter = "all" })
                 Pill(if (unreadChats > 0) "Unread $unreadChats" else "Unread", filter == "unread", { filter = "unread" })
                 Pill("Sellers", filter == "sellers", { filter = "sellers" })
+                Pill("Groups", filter == "groups", { filter = "groups" })
             }
 
             Column(
@@ -163,11 +168,23 @@ fun ChatsTab(nav: NavHostController) {
                 }
             }
         }
-        FloatingActionButton(
-            onClick = { nav.navigate(Routes.NEW_CHAT) },
-            containerColor = Mx.Gold, contentColor = Mx.Navy, shape = RoundedCornerShape(20.dp),
-            modifier = Modifier.align(Alignment.BottomEnd).padding(18.dp).size(58.dp).testTag("new-chat"),
-        ) { Icon(Ic.NewChat, contentDescription = "New chat", modifier = Modifier.size(26.dp)) }
+        Box(Modifier.align(Alignment.BottomEnd).padding(18.dp)) {
+            FloatingActionButton(
+                onClick = { newMenu = true },
+                containerColor = Mx.Gold, contentColor = Mx.Navy, shape = RoundedCornerShape(20.dp),
+                modifier = Modifier.size(58.dp).testTag("new-chat"),
+            ) { Icon(Ic.NewChat, contentDescription = "New chat or group", modifier = Modifier.size(26.dp)) }
+            androidx.compose.material3.DropdownMenu(newMenu, onDismissRequest = { newMenu = false }) {
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text("New chat") }, leadingIcon = { Icon(Ic.Chat, null, tint = Mx.Blue) },
+                    onClick = { newMenu = false; nav.navigate(Routes.NEW_CHAT) },
+                )
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text("New group") }, leadingIcon = { Icon(Ic.Group, null, tint = Mx.Blue) },
+                    onClick = { newMenu = false; nav.navigate(Routes.NEW_GROUP) }, modifier = Modifier.testTag("new-group"),
+                )
+            }
+        }
     }
 }
 
@@ -178,12 +195,12 @@ private fun ChatRow(c: Conversation, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Avatar(c.peer.name, 50.dp, key = c.peer.id)
+        ChatAvatar(c, 50.dp)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(c.peer.name, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                Text(c.name, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false))
-                if (c.listingId != null) SellerBadge(c.peer.badge)
+                if (c.listingId != null) c.peer?.let { SellerBadge(it.badge) }
                 Spacer(Modifier.weight(1f))
                 Text(Format.chatTime(c.lastAt), fontSize = 12.sp, color = if (c.unread > 0) Mx.Blue else Mx.Muted)
             }

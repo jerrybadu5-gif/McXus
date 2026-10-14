@@ -50,6 +50,18 @@ fun HomeScreen(nav: NavHostController, initialTab: Int = 0) {
     val chat = LocalApp.current.chat
     val conversations = chat?.conversations?.collectAsState()?.value.orEmpty()
     val unread = conversations.sumOf { it.unread }
+    // Android 13+: ask once for permission to show new-message notifications.
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val askNotifications = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+    ) { }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        val prefs = context.getSharedPreferences("mcxus", android.content.Context.MODE_PRIVATE)
+        if (android.os.Build.VERSION.SDK_INT >= 33 && !pg.mcxus.app.Notifier.allowed(context) && !prefs.getBoolean("asked_notifications", false)) {
+            prefs.edit().putBoolean("asked_notifications", true).apply()
+            askNotifications.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
     Column(Modifier.fillMaxSize().background(Mx.Bg)) {
         Box(Modifier.weight(1f)) {
             when (tab) {

@@ -86,6 +86,19 @@ fun Avatar(name: String, size: Dp = 50.dp, ring: Color? = null, key: String = na
     }
 }
 
+/** Round avatar for a chat: a person's initials, or the group icon on navy. */
+@Composable
+fun ChatAvatar(c: pg.mcxus.app.chat.Conversation, size: Dp = 50.dp, ring: Color? = null) {
+    if (!c.isGroup) {
+        Avatar(c.name, size, ring, key = c.avatarKey)
+        return
+    }
+    val inner = Modifier.size(size).clip(CircleShape).background(Mx.Navy)
+    Box(if (ring != null) inner.border(2.dp, ring, CircleShape) else inner, contentAlignment = Alignment.Center) {
+        Icon(Ic.Group, contentDescription = null, tint = Mx.Gold, modifier = Modifier.size(size * 0.5f))
+    }
+}
+
 @Composable
 fun Tag(text: String, bg: Color = Mx.GoldSoft, fg: Color = Mx.GoldInk) {
     Text(

@@ -152,3 +152,22 @@ Tell me: phone model, anything slow or confusing, and how the design feels compa
 | L6 | Seller: open the order → **Change place** → new landmark → Save | buyer sees the new place after refresh |
 | L7 | In the chat: **+ → Share a location** → Send | a "Meet / deliver here" card with Directions on both phones |
 | L8 | Location turned off on the phone, tap **Use my location** | a clear message to turn Location on; **Set on map** still works |
+
+## 8. M3.2 groups, photos, voice notes, notifications (40 minutes)
+
+Use two phones, or one phone plus the laptop emulator. Push needs the Firebase setup in `docs/FIREBASE-PUSH.md`
+(G9–G10 only); everything else works without it.
+
+| # | Do | You should see |
+|---|---|---|
+| G1 | Chats → gold button → **New group** → name it, tick two people (or add by number) → **Create group** | the group opens; "You added …"; header shows "3 members · encrypted" |
+| G2 | On the other phones | the group appears; they can send and read; incoming bubbles show the sender's name in colour |
+| G3 | **+ → Photo from gallery** (type a caption first if you like) | blurry preview at once, sharp photo after a second; tap opens full screen |
+| G4 | **+ → Take a photo** | same, from the camera |
+| G5 | Tap the **microphone**, speak, tap send (or ✕ to cancel) | a voice bubble with length; others tap ▶ to play |
+| G6 | Group info (tap the group name) → **Add people** | new person joins and can read new messages (not older ones) |
+| G7 | Group info → tap a member → **Remove from group** | they see "You were removed"; they no longer get messages |
+| G8 | A member taps **Leave group** | "<name> left"; the admin's phone removes their keys automatically |
+| G9 | Close McXus on phone A; send it a message from phone B | notification on A within seconds: name + text (lock screen: "New message") |
+| G10 | Me → **Notifications** → Hide text, repeat G9 | notification says only "New message" |
+| G11 | Try to send a 10-minute voice note | recording stops at 5 minutes |

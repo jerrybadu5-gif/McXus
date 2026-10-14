@@ -734,6 +734,20 @@ internal interface UniffiForeignFutureCompleteVoid : com.sun.jna.Callback {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // For large crates we prevent `MethodTooLargeException` (see #2340)
 // N.B. the name of the extension is very misleading, since it is 
 // rather `InterfaceTooLargeException`, caused by too many methods 
@@ -749,21 +763,35 @@ internal interface UniffiForeignFutureCompleteVoid : com.sun.jna.Callback {
 // when the library is loaded.
 internal interface IntegrityCheckingUniffiLib : Library {
     // Integrity check functions only
-    fun uniffi_mcxus_crypto_checksum_method_mlsclient_create_direct(
+    fun uniffi_mcxus_crypto_checksum_method_mlsclient_add_members(
+): Short
+fun uniffi_mcxus_crypto_checksum_method_mlsclient_confirm_change(
+): Short
+fun uniffi_mcxus_crypto_checksum_method_mlsclient_create_direct(
+): Short
+fun uniffi_mcxus_crypto_checksum_method_mlsclient_create_group(
 ): Short
 fun uniffi_mcxus_crypto_checksum_method_mlsclient_decrypt(
 ): Short
+fun uniffi_mcxus_crypto_checksum_method_mlsclient_discard_change(
+): Short
 fun uniffi_mcxus_crypto_checksum_method_mlsclient_encrypt(
+): Short
+fun uniffi_mcxus_crypto_checksum_method_mlsclient_epoch(
 ): Short
 fun uniffi_mcxus_crypto_checksum_method_mlsclient_has_group(
 ): Short
 fun uniffi_mcxus_crypto_checksum_method_mlsclient_identity(
+): Short
+fun uniffi_mcxus_crypto_checksum_method_mlsclient_is_active(
 ): Short
 fun uniffi_mcxus_crypto_checksum_method_mlsclient_join(
 ): Short
 fun uniffi_mcxus_crypto_checksum_method_mlsclient_key_packages(
 ): Short
 fun uniffi_mcxus_crypto_checksum_method_mlsclient_members(
+): Short
+fun uniffi_mcxus_crypto_checksum_method_mlsclient_remove_members(
 ): Short
 fun uniffi_mcxus_crypto_checksum_method_mlsclient_safety_number(
 ): Short
@@ -824,21 +852,35 @@ fun uniffi_mcxus_crypto_fn_free_mlsclient(`ptr`: Pointer,uniffi_out_err: UniffiR
 ): Unit
 fun uniffi_mcxus_crypto_fn_constructor_mlsclient_open(`statePath`: RustBuffer.ByValue,`identity`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Pointer
+fun uniffi_mcxus_crypto_fn_method_mlsclient_add_members(`ptr`: Pointer,`groupId`: RustBuffer.ByValue,`keyPackages`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_mcxus_crypto_fn_method_mlsclient_confirm_change(`ptr`: Pointer,`groupId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
 fun uniffi_mcxus_crypto_fn_method_mlsclient_create_direct(`ptr`: Pointer,`groupId`: RustBuffer.ByValue,`peerKeyPackage`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+fun uniffi_mcxus_crypto_fn_method_mlsclient_create_group(`ptr`: Pointer,`groupId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
 fun uniffi_mcxus_crypto_fn_method_mlsclient_decrypt(`ptr`: Pointer,`groupId`: RustBuffer.ByValue,`message`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+fun uniffi_mcxus_crypto_fn_method_mlsclient_discard_change(`ptr`: Pointer,`groupId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
 fun uniffi_mcxus_crypto_fn_method_mlsclient_encrypt(`ptr`: Pointer,`groupId`: RustBuffer.ByValue,`plaintext`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+fun uniffi_mcxus_crypto_fn_method_mlsclient_epoch(`ptr`: Pointer,`groupId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Long
 fun uniffi_mcxus_crypto_fn_method_mlsclient_has_group(`ptr`: Pointer,`groupId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
 fun uniffi_mcxus_crypto_fn_method_mlsclient_identity(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+fun uniffi_mcxus_crypto_fn_method_mlsclient_is_active(`ptr`: Pointer,`groupId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
 fun uniffi_mcxus_crypto_fn_method_mlsclient_join(`ptr`: Pointer,`welcome`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_mcxus_crypto_fn_method_mlsclient_key_packages(`ptr`: Pointer,`count`: Int,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_mcxus_crypto_fn_method_mlsclient_members(`ptr`: Pointer,`groupId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_mcxus_crypto_fn_method_mlsclient_remove_members(`ptr`: Pointer,`groupId`: RustBuffer.ByValue,`identities`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_mcxus_crypto_fn_method_mlsclient_safety_number(`ptr`: Pointer,`groupId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
@@ -968,19 +1010,37 @@ private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
 }
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
+    if (lib.uniffi_mcxus_crypto_checksum_method_mlsclient_add_members() != 55442.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mcxus_crypto_checksum_method_mlsclient_confirm_change() != 34593.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_mcxus_crypto_checksum_method_mlsclient_create_direct() != 55685.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mcxus_crypto_checksum_method_mlsclient_create_group() != 20196.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_mcxus_crypto_checksum_method_mlsclient_decrypt() != 52805.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_mcxus_crypto_checksum_method_mlsclient_discard_change() != 51623.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_mcxus_crypto_checksum_method_mlsclient_encrypt() != 49480.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mcxus_crypto_checksum_method_mlsclient_epoch() != 34510.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_mcxus_crypto_checksum_method_mlsclient_has_group() != 54957.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_mcxus_crypto_checksum_method_mlsclient_identity() != 46605.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mcxus_crypto_checksum_method_mlsclient_is_active() != 46397.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_mcxus_crypto_checksum_method_mlsclient_join() != 64962.toShort()) {
@@ -990,6 +1050,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_mcxus_crypto_checksum_method_mlsclient_members() != 5397.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mcxus_crypto_checksum_method_mlsclient_remove_members() != 23711.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_mcxus_crypto_checksum_method_mlsclient_safety_number() != 12698.toShort()) {
@@ -1161,6 +1224,29 @@ public object FfiConverterUInt: FfiConverter<UInt, Int> {
 
     override fun write(value: UInt, buf: ByteBuffer) {
         buf.putInt(value.toInt())
+    }
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterULong: FfiConverter<ULong, Long> {
+    override fun lift(value: Long): ULong {
+        return value.toULong()
+    }
+
+    override fun read(buf: ByteBuffer): ULong {
+        return lift(buf.getLong())
+    }
+
+    override fun lower(value: ULong): Long {
+        return value.toLong()
+    }
+
+    override fun allocationSize(value: ULong) = 8UL
+
+    override fun write(value: ULong, buf: ByteBuffer) {
+        buf.putLong(value.toLong())
     }
 }
 
@@ -1368,18 +1454,49 @@ public object FfiConverterByteArray: FfiConverterRustBuffer<ByteArray> {
 public interface MlsClientInterface {
     
     /**
+     * Add people (one claimed KeyPackage each). The change stays pending until `confirm_change` (server
+     * accepted) or `discard_change` (server refused because someone else changed the group first).
+     */
+    fun `addMembers`(`groupId`: kotlin.ByteArray, `keyPackages`: List<kotlin.ByteArray>): GroupChange
+    
+    /**
+     * The server accepted this phone's pending change: apply it.
+     */
+    fun `confirmChange`(`groupId`: kotlin.ByteArray)
+    
+    /**
      * Start a two-person encrypted chat: create group `group_id` with the peer's KeyPackage.
      * Returns the Welcome to upload for the peer.
      */
     fun `createDirect`(`groupId`: kotlin.ByteArray, `peerKeyPackage`: kotlin.ByteArray): kotlin.ByteArray
     
+    /**
+     * Create a group with only this phone in it (then add people with `add_members`).
+     */
+    fun `createGroup`(`groupId`: kotlin.ByteArray)
+    
     fun `decrypt`(`groupId`: kotlin.ByteArray, `message`: kotlin.ByteArray): Decrypted
     
+    /**
+     * The server refused this phone's pending change (another change came first): drop it.
+     */
+    fun `discardChange`(`groupId`: kotlin.ByteArray)
+    
     fun `encrypt`(`groupId`: kotlin.ByteArray, `plaintext`: kotlin.ByteArray): kotlin.ByteArray
+    
+    /**
+     * The group's current epoch (increases by one with every accepted change).
+     */
+    fun `epoch`(`groupId`: kotlin.ByteArray): kotlin.ULong
     
     fun `hasGroup`(`groupId`: kotlin.ByteArray): kotlin.Boolean
     
     fun `identity`(): kotlin.String
+    
+    /**
+     * False once this phone has been removed from the group.
+     */
+    fun `isActive`(`groupId`: kotlin.ByteArray): kotlin.Boolean
     
     /**
      * Join a chat from a Welcome. Returns the group id (the conversation id).
@@ -1395,6 +1512,11 @@ public interface MlsClientInterface {
      * Identities of the group's members, e.g. ["user:…", "user:…"].
      */
     fun `members`(`groupId`: kotlin.ByteArray): List<kotlin.String>
+    
+    /**
+     * Remove people by identity ("user:<uuid>"). Unknown identities are ignored. Pending like `add_members`.
+     */
+    fun `removeMembers`(`groupId`: kotlin.ByteArray, `identities`: List<kotlin.String>): GroupChange
     
     /**
      * 12 groups of 5 digits from both members' signature keys. Two people compare it (or scan each other's
@@ -1492,6 +1614,38 @@ open class MlsClient: Disposable, AutoCloseable, MlsClientInterface
 
     
     /**
+     * Add people (one claimed KeyPackage each). The change stays pending until `confirm_change` (server
+     * accepted) or `discard_change` (server refused because someone else changed the group first).
+     */
+    @Throws(CryptoException::class)override fun `addMembers`(`groupId`: kotlin.ByteArray, `keyPackages`: List<kotlin.ByteArray>): GroupChange {
+            return FfiConverterTypeGroupChange.lift(
+    callWithPointer {
+    uniffiRustCallWithError(CryptoException) { _status ->
+    UniffiLib.INSTANCE.uniffi_mcxus_crypto_fn_method_mlsclient_add_members(
+        it, FfiConverterByteArray.lower(`groupId`),FfiConverterSequenceByteArray.lower(`keyPackages`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * The server accepted this phone's pending change: apply it.
+     */
+    @Throws(CryptoException::class)override fun `confirmChange`(`groupId`: kotlin.ByteArray)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(CryptoException) { _status ->
+    UniffiLib.INSTANCE.uniffi_mcxus_crypto_fn_method_mlsclient_confirm_change(
+        it, FfiConverterByteArray.lower(`groupId`),_status)
+}
+    }
+    
+    
+
+    
+    /**
      * Start a two-person encrypted chat: create group `group_id` with the peer's KeyPackage.
      * Returns the Welcome to upload for the peer.
      */
@@ -1508,6 +1662,21 @@ open class MlsClient: Disposable, AutoCloseable, MlsClientInterface
     
 
     
+    /**
+     * Create a group with only this phone in it (then add people with `add_members`).
+     */
+    @Throws(CryptoException::class)override fun `createGroup`(`groupId`: kotlin.ByteArray)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(CryptoException) { _status ->
+    UniffiLib.INSTANCE.uniffi_mcxus_crypto_fn_method_mlsclient_create_group(
+        it, FfiConverterByteArray.lower(`groupId`),_status)
+}
+    }
+    
+    
+
+    
     @Throws(CryptoException::class)override fun `decrypt`(`groupId`: kotlin.ByteArray, `message`: kotlin.ByteArray): Decrypted {
             return FfiConverterTypeDecrypted.lift(
     callWithPointer {
@@ -1521,12 +1690,43 @@ open class MlsClient: Disposable, AutoCloseable, MlsClientInterface
     
 
     
+    /**
+     * The server refused this phone's pending change (another change came first): drop it.
+     */
+    @Throws(CryptoException::class)override fun `discardChange`(`groupId`: kotlin.ByteArray)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(CryptoException) { _status ->
+    UniffiLib.INSTANCE.uniffi_mcxus_crypto_fn_method_mlsclient_discard_change(
+        it, FfiConverterByteArray.lower(`groupId`),_status)
+}
+    }
+    
+    
+
+    
     @Throws(CryptoException::class)override fun `encrypt`(`groupId`: kotlin.ByteArray, `plaintext`: kotlin.ByteArray): kotlin.ByteArray {
             return FfiConverterByteArray.lift(
     callWithPointer {
     uniffiRustCallWithError(CryptoException) { _status ->
     UniffiLib.INSTANCE.uniffi_mcxus_crypto_fn_method_mlsclient_encrypt(
         it, FfiConverterByteArray.lower(`groupId`),FfiConverterByteArray.lower(`plaintext`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * The group's current epoch (increases by one with every accepted change).
+     */
+    @Throws(CryptoException::class)override fun `epoch`(`groupId`: kotlin.ByteArray): kotlin.ULong {
+            return FfiConverterULong.lift(
+    callWithPointer {
+    uniffiRustCallWithError(CryptoException) { _status ->
+    UniffiLib.INSTANCE.uniffi_mcxus_crypto_fn_method_mlsclient_epoch(
+        it, FfiConverterByteArray.lower(`groupId`),_status)
 }
     }
     )
@@ -1551,6 +1751,22 @@ open class MlsClient: Disposable, AutoCloseable, MlsClientInterface
     uniffiRustCall() { _status ->
     UniffiLib.INSTANCE.uniffi_mcxus_crypto_fn_method_mlsclient_identity(
         it, _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * False once this phone has been removed from the group.
+     */
+    @Throws(CryptoException::class)override fun `isActive`(`groupId`: kotlin.ByteArray): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithPointer {
+    uniffiRustCallWithError(CryptoException) { _status ->
+    UniffiLib.INSTANCE.uniffi_mcxus_crypto_fn_method_mlsclient_is_active(
+        it, FfiConverterByteArray.lower(`groupId`),_status)
 }
     }
     )
@@ -1599,6 +1815,22 @@ open class MlsClient: Disposable, AutoCloseable, MlsClientInterface
     uniffiRustCallWithError(CryptoException) { _status ->
     UniffiLib.INSTANCE.uniffi_mcxus_crypto_fn_method_mlsclient_members(
         it, FfiConverterByteArray.lower(`groupId`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Remove people by identity ("user:<uuid>"). Unknown identities are ignored. Pending like `add_members`.
+     */
+    @Throws(CryptoException::class)override fun `removeMembers`(`groupId`: kotlin.ByteArray, `identities`: List<kotlin.String>): GroupChange {
+            return FfiConverterTypeGroupChange.lift(
+    callWithPointer {
+    uniffiRustCallWithError(CryptoException) { _status ->
+    UniffiLib.INSTANCE.uniffi_mcxus_crypto_fn_method_mlsclient_remove_members(
+        it, FfiConverterByteArray.lower(`groupId`),FfiConverterSequenceString.lower(`identities`),_status)
 }
     }
     )
@@ -1716,6 +1948,54 @@ public object FfiConverterTypeDecrypted: FfiConverterRustBuffer<Decrypted> {
             FfiConverterString.write(value.`kind`, buf)
             FfiConverterOptionalByteArray.write(value.`plaintext`, buf)
             FfiConverterString.write(value.`sender`, buf)
+    }
+}
+
+
+
+/**
+ * A membership change created on this phone, waiting for the server to accept it.
+ */
+data class GroupChange (
+    /**
+     * Send to the current members (via the server, with `epoch`).
+     */
+    var `commit`: kotlin.ByteArray, 
+    /**
+     * Send to the new members (only when people were added).
+     */
+    var `welcome`: kotlin.ByteArray?, 
+    /**
+     * The epoch the commit was made in; the server accepts it only if this is still the group's epoch.
+     */
+    var `epoch`: kotlin.ULong
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeGroupChange: FfiConverterRustBuffer<GroupChange> {
+    override fun read(buf: ByteBuffer): GroupChange {
+        return GroupChange(
+            FfiConverterByteArray.read(buf),
+            FfiConverterOptionalByteArray.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: GroupChange) = (
+            FfiConverterByteArray.allocationSize(value.`commit`) +
+            FfiConverterOptionalByteArray.allocationSize(value.`welcome`) +
+            FfiConverterULong.allocationSize(value.`epoch`)
+    )
+
+    override fun write(value: GroupChange, buf: ByteBuffer) {
+            FfiConverterByteArray.write(value.`commit`, buf)
+            FfiConverterOptionalByteArray.write(value.`welcome`, buf)
+            FfiConverterULong.write(value.`epoch`, buf)
     }
 }
 

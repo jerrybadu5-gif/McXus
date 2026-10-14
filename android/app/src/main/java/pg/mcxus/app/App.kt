@@ -10,6 +10,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import pg.mcxus.app.chat.ChatEngine
 import pg.mcxus.app.net.Api
 import pg.mcxus.app.net.ApiError
@@ -62,15 +63,31 @@ class App(context: Context, val scope: CoroutineScope) {
         startChat()
     }
 
+    /** Which chat is on screen (no notification for it) and whether McXus is in front. */
+    var openChat: String? = null
+    var inForeground = false
+
+    private val chatMutex = kotlinx.coroutines.sync.Mutex()
+
     fun startChat() {
-        val user = session.userId ?: return
-        if (chat != null) return
-        launch {
-            chat = ChatEngine.create(appContext, api, user).also { it.start() }
-        }
+        if (session.userId == null || chat != null) return
+        launch { ensureChat() }
+    }
+
+    /** The running chat engine, starting it if needed (also used when a push wakes a closed app). */
+    suspend fun ensureChat(): ChatEngine? = chatMutex.withLock {
+        chat?.let { return@withLock it }
+        val user = session.userId ?: return@withLock null
+        val engine = ChatEngine.create(appContext, api, user)
+        chat = engine
+        engine.start()
+        scope.launch { engine.incoming.collect { Notifier.show(appContext, this@App, engine, it) } }
+        Push.register(appContext) { token -> scope.launch { runCatching { engine.registerPushToken(token) } } }
+        engine
     }
 
     fun signOut() {
+        chat?.let { engine -> scope.launch { runCatching { engine.registerPushToken(null) } } }
         chat?.stop()
         chat = null
         session.signOut()

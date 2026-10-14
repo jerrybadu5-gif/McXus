@@ -23,20 +23,24 @@ services:
     environment:
       MCXUS_DATABASE_URL: postgresql+psycopg://mcxus:${MCXUS_DB_PASSWORD:-mcxus}@db:5432/mcxus
     volumes:
-      - media:/app/media   # listing photos
+      - media:/app/media   # listing photos (public)
+      - blobs:/app/blobs   # encrypted chat photos and voice notes (private, unreadable to the server)
+      - ./secrets:/app/secrets:ro   # optional: firebase.json for push (see docs/FIREBASE-PUSH.md)
     ports:
       - "${MCXUS_API_BIND:-127.0.0.1}:8000:8000"   # start-dev.ps1 -Lan sets 0.0.0.0 so a phone on your Wi-Fi can connect
     depends_on:
       db: {condition: service_healthy}
     restart: unless-stopped
 
-  worker:   # applies escrow timers: 20-minute accept window and 7-day auto-release
+  worker:   # escrow timers (20-minute accept, 7-day auto-release) and 30-day deletion of chat messages/files
     build: ./backend
     command: ["python", "-m", "app.jobs"]
     healthcheck: {disable: true}   # no web server in the worker
     env_file: [{path: ./backend/.env, required: false}]
     environment:
       MCXUS_DATABASE_URL: postgresql+psycopg://mcxus:${MCXUS_DB_PASSWORD:-mcxus}@db:5432/mcxus
+    volumes:
+      - blobs:/app/blobs
     depends_on:
       api: {condition: service_healthy}
     restart: unless-stopped
@@ -44,3 +48,4 @@ services:
 volumes:
   pgdata:
   media:
+  blobs:

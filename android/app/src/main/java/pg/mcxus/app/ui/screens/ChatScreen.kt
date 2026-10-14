@@ -1,5 +1,20 @@
 package pg.mcxus.app.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import pg.mcxus.app.Notifier
+import pg.mcxus.app.ui.ChatAvatar
+import pg.mcxus.app.util.Images
+import pg.mcxus.app.util.VoicePlayer
+import pg.mcxus.app.util.VoiceRecorder
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -89,6 +104,69 @@ fun ChatScreen(nav: NavHostController, conversationId: String) {
     var sharingPlace by remember { mutableStateOf(false) }
     val messages = remember(version, conversationId) { engine.messages(conversationId) }
     val list = rememberLazyListState()
+    val context = LocalContext.current
+    val isGroup = conv?.isGroup == true
+    // Group member names (for "who wrote this" and join/leave notices); refreshed when the group changes.
+    val eventCount = messages.count { Payload.parse(it.payload).optString("t") == "event" }
+    var names by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    LaunchedEffect(isGroup, eventCount) {
+        if (isGroup) runCatching { engine.groupInfo(conversationId, refresh = eventCount > 0) }
+            .onSuccess { g -> names = g.members.associate { it.id to it.name } }
+    }
+    val recorder = remember { VoiceRecorder(context) }
+    var recordingMs by remember { mutableStateOf(-1L) }
+    var cameraUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    val removed = readiness is Readiness.Failed && isGroup
+
+    DisposableEffect(conversationId) {
+        app.openChat = conversationId
+        Notifier.clear(context, conversationId)
+        onDispose {
+            app.openChat = null
+            recorder.cancel()
+            VoicePlayer.stop()
+        }
+    }
+    LaunchedEffect(recordingMs >= 0) {
+        while (recordingMs >= 0) {
+            recordingMs = recorder.elapsedMs()
+            delay(200)
+        }
+    }
+
+    fun sendPhoto(uri: android.net.Uri) {
+        sending = true
+        app.launch(onDone = { sending = false }) {
+            val jpeg = withContext(Dispatchers.Default) { Images.prepareUpload(context.contentResolver, uri, maxPx = 1280, quality = 70) }
+            val (w, h) = Images.size(jpeg)
+            val thumb = withContext(Dispatchers.Default) { Images.thumbnail(jpeg) }
+            if (!engine.sendImage(conversationId, jpeg, w, h, thumb, draft.trim())) app.say("This chat is not ready yet — try again in a moment.")
+            else draft = ""
+        }
+    }
+    val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { it?.let(::sendPhoto) }
+    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok -> if (ok) cameraUri?.let(::sendPhoto) }
+    fun openCamera() {
+        val file = java.io.File(context.cacheDir, "chat-camera.jpg")
+        cameraUri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.files", file)
+        camera.launch(cameraUri!!)
+    }
+
+    fun startRecording() {
+        runCatching { recorder.start(); recordingMs = 0 }.onFailure { app.say("Could not start the microphone") }
+    }
+    val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) startRecording() else app.say("Microphone permission is needed for voice messages")
+    }
+    fun stopAndSend() {
+        val result = recorder.stop()
+        recordingMs = -1
+        if (result == null) { app.say("Hold on a little longer to record"); return }
+        sending = true
+        app.launch(onDone = { sending = false }) {
+            if (!engine.sendVoice(conversationId, result.first, result.second)) app.say("This chat is not ready yet — try again in a moment.")
+        }
+    }
 
     LaunchedEffect(conversationId, conv != null) {
         if (conv == null) return@LaunchedEffect
@@ -122,16 +200,26 @@ fun ChatScreen(nav: NavHostController, conversationId: String) {
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             IconButton(onClick = { nav.back() }) { Icon(Ic.Back, "Back to chats", tint = Color.White) }
-            Avatar(conv?.peer?.name ?: "?", 40.dp, ring = Mx.Gold, key = conv?.peer?.id ?: "")
-            Column(Modifier.weight(1f)) {
-                Text(conv?.peer?.name ?: "Chat", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1,
-                    overflow = TextOverflow.Ellipsis)
-                val sub = buildList {
-                    conv?.peer?.badge?.takeIf { it.isNotEmpty() && it != "new_seller" }?.let { add(Format.badge(it)) }
-                    conv?.peer?.rating?.let { add("★ $it") }
-                    add(if (readiness == Readiness.Ready) "encrypted" else "securing…")
-                }.joinToString(" · ")
-                Text(sub, color = Mx.OnNavyMuted, fontSize = 12.sp, maxLines = 1)
+            Row(
+                Modifier.weight(1f).clickable(enabled = isGroup) { nav.navigate(Routes.group(conversationId)) }.testTag("chat-header"),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (conv != null) ChatAvatar(conv, 40.dp, ring = Mx.Gold) else Avatar("?", 40.dp)
+                Column(Modifier.weight(1f)) {
+                    Text(conv?.name ?: "Chat", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1,
+                        overflow = TextOverflow.Ellipsis)
+                    val sub = buildList {
+                        if (isGroup) {
+                            add("${conv?.memberCount ?: 0} members")
+                        } else {
+                            conv?.peer?.badge?.takeIf { it.isNotEmpty() && it != "new_seller" }?.let { add(Format.badge(it)) }
+                            conv?.peer?.rating?.let { add("★ $it") }
+                        }
+                        add(if (readiness == Readiness.Ready) "encrypted" else "securing…")
+                    }.joinToString(" · ")
+                    Text(sub, color = Mx.OnNavyMuted, fontSize = 12.sp, maxLines = 1)
+                }
             }
             Box {
                 IconButton(onClick = { menu = true }) { Icon(Ic.More, "More options", tint = Color.White) }
@@ -140,6 +228,7 @@ fun ChatScreen(nav: NavHostController, conversationId: String) {
                         menu = false
                         safety = engine.safetyNumber(conversationId) ?: "Not available until the chat is set up."
                     })
+                    if (isGroup) DropdownMenuItem(text = { Text("Group info") }, onClick = { menu = false; nav.navigate(Routes.group(conversationId)) })
                     DropdownMenuItem(text = { Text("My orders") }, onClick = { menu = false; nav.navigate(Routes.ORDERS) })
                 }
             }
@@ -170,11 +259,38 @@ fun ChatScreen(nav: NavHostController, conversationId: String) {
                 is Readiness.Failed -> item { SystemLine(r.why) }
                 Readiness.Ready -> Unit
             }
-            items(messages, key = { it.localId }) { m -> MessageItem(m, nav, version) }
+            items(messages, key = { it.localId }) { m -> MessageItem(m, nav, version, if (isGroup) names else null, engine.userId) }
         }
 
         // Composer
-        Row(
+        if (removed) {
+            Text(
+                "You can't send messages to this group because you're no longer a member.",
+                Modifier.fillMaxWidth().background(Color.White).navigationBarsPadding().padding(16.dp),
+                color = Mx.Muted, fontSize = 13.sp, textAlign = TextAlign.Center,
+            )
+        } else if (recordingMs >= 0) {
+            Row(
+                Modifier.fillMaxWidth().navigationBarsPadding().padding(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                IconButton(onClick = { recorder.cancel(); recordingMs = -1 }, modifier = Modifier.testTag("cancel-voice")) {
+                    Icon(Ic.Close, "Cancel recording", tint = Mx.Red)
+                }
+                Row(
+                    Modifier.weight(1f).clip(RoundedCornerShape(24.dp)).background(Color.White).padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.size(10.dp).clip(CircleShape).background(Mx.Red))
+                    Text("  Recording  ${Payload.formatDuration(recordingMs)}", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                }
+                IconButton(
+                    onClick = { stopAndSend() },
+                    modifier = Modifier.size(48.dp).clip(CircleShape).background(Mx.Blue).testTag("send-voice"),
+                ) { Icon(Ic.Send, "Send voice message", tint = Color.White, modifier = Modifier.size(22.dp)) }
+            }
+        } else Row(
             Modifier.fillMaxWidth().navigationBarsPadding().padding(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -185,9 +301,19 @@ fun ChatScreen(nav: NavHostController, conversationId: String) {
             ) {
                 Box {
                     IconButton(onClick = { attach = true }, modifier = Modifier.testTag("attach")) {
-                        Icon(Ic.Plus, "Share a listing or a location", tint = Mx.Muted)
+                        Icon(Ic.Plus, "Send a photo, location or listing", tint = Mx.Muted)
                     }
                     DropdownMenu(attach, onDismissRequest = { attach = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Photo from gallery") },
+                            leadingIcon = { Icon(Ic.Image, null, tint = Mx.Blue) },
+                            onClick = { attach = false; gallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Take a photo") },
+                            leadingIcon = { Icon(Ic.Camera, null, tint = Mx.Blue) },
+                            onClick = { attach = false; openCamera() },
+                        )
                         DropdownMenuItem(
                             text = { Text("Share a location (meet / deliver here)") },
                             leadingIcon = { Icon(Ic.Pin, null, tint = Mx.Blue) },
@@ -212,7 +338,7 @@ fun ChatScreen(nav: NavHostController, conversationId: String) {
                         inner()
                     },
                 )
-                Row(
+                if (!isGroup) Row(
                     Modifier.clip(RoundedCornerShape(18.dp)).background(Mx.GoldSoft).clickable {
                         val listing = conv?.listingId
                         if (listing != null) nav.navigate(Routes.listing(listing))
@@ -224,11 +350,23 @@ fun ChatScreen(nav: NavHostController, conversationId: String) {
                     Text(" Pay", color = Mx.GoldInk, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
             }
-            IconButton(
-                onClick = { val text = draft.trim(); if (text.isNotEmpty()) send(Payload.text(text)) { draft = "" } },
-                enabled = !sending && draft.isNotBlank() && readiness == Readiness.Ready,
-                modifier = Modifier.size(48.dp).clip(CircleShape).background(if (draft.isNotBlank()) Mx.Blue else Mx.Grey).testTag("send"),
-            ) { Icon(Ic.Send, "Send", tint = Color.White, modifier = Modifier.size(22.dp)) }
+            if (draft.isBlank()) {
+                IconButton(
+                    onClick = {
+                        if (readiness != Readiness.Ready) app.say("This chat is not ready yet — try again in a moment.")
+                        else if (context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) startRecording()
+                        else micPermission.launch(android.Manifest.permission.RECORD_AUDIO)
+                    },
+                    enabled = !sending,
+                    modifier = Modifier.size(48.dp).clip(CircleShape).background(Mx.Blue).testTag("mic"),
+                ) { Icon(Ic.Mic, "Record a voice message", tint = Color.White, modifier = Modifier.size(22.dp)) }
+            } else {
+                IconButton(
+                    onClick = { val text = draft.trim(); if (text.isNotEmpty()) send(Payload.text(text)) { draft = "" } },
+                    enabled = !sending && readiness == Readiness.Ready,
+                    modifier = Modifier.size(48.dp).clip(CircleShape).background(Mx.Blue).testTag("send"),
+                ) { Icon(Ic.Send, "Send", tint = Color.White, modifier = Modifier.size(22.dp)) }
+            }
         }
     }
 
@@ -239,7 +377,8 @@ fun ChatScreen(nav: NavHostController, conversationId: String) {
             title = { Text("Safety number") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Compare these numbers with ${conv?.peer?.name ?: "the other person"} in person or on a call. If they match, nobody is in the middle.")
+                    Text(if (isGroup) "Compare these numbers with other members in person or on a call. If they match, nobody is in the middle."
+                        else "Compare these numbers with ${conv?.peer?.name ?: "the other person"} in person or on a call. If they match, nobody is in the middle.")
                     Text(number.chunked(24).joinToString("\n"), fontWeight = FontWeight.Bold, fontSize = 16.sp, letterSpacing = 1.sp)
                 }
             },
@@ -252,7 +391,8 @@ fun ChatScreen(nav: NavHostController, conversationId: String) {
             title = { Text("Share a location") },
             text = {
                 PlaceField("Meet or deliver here", draft, { draft = it }, requirePng = false,
-                    hint = "Only you and ${conv?.peer?.name ?: "this person"} can see it (end-to-end encrypted).")
+                    hint = if (isGroup) "Only members of this group can see it (end-to-end encrypted)."
+                    else "Only you and ${conv?.peer?.name ?: "this person"} can see it (end-to-end encrypted).")
             },
             confirmButton = {
                 TextButton(onClick = {
@@ -282,10 +422,13 @@ private fun SystemLine(text: String) {
 }
 
 @Composable
-private fun MessageItem(m: LocalMessage, nav: NavHostController, version: Long) {
+private fun MessageItem(m: LocalMessage, nav: NavHostController, version: Long, names: Map<String, String>?, me: String) {
     val p = Payload.parse(m.payload)
     when (p.optString("t")) {
         "system" -> SystemLine(p.optString("body"))
+        "event" -> SystemLine(eventText(p, names.orEmpty(), me))
+        "image" -> Side(m.mine) { Sender(m, names); ImageBubble(p, m) }
+        "voice" -> Side(m.mine) { Sender(m, names); VoiceBubble(p, m) }
         "listing" -> Side(m.mine) {
             Column(
                 Modifier.width(250.dp).clip(RoundedCornerShape(16.dp)).background(Color.White).border(1.dp, Mx.Field, RoundedCornerShape(16.dp))
@@ -333,6 +476,7 @@ private fun MessageItem(m: LocalMessage, nav: NavHostController, version: Long) 
                 Modifier.widthIn(max = 290.dp).clip(shape).background(if (m.mine) Mx.Blue else Color.White)
                     .padding(horizontal = 12.dp, vertical = 8.dp),
             ) {
+                if (!m.mine && names != null) SenderName(m.sender, names)
                 Text(p.optString("body"), color = if (m.mine) Color.White else Mx.Ink, fontSize = 15.sp, lineHeight = 20.sp)
                 Row(Modifier.align(Alignment.End), verticalAlignment = Alignment.CenterVertically) {
                     Text(Format.clock(m.at), color = if (m.mine) Mx.OnNavyMuted else Mx.Muted, fontSize = 11.sp)
@@ -345,7 +489,153 @@ private fun MessageItem(m: LocalMessage, nav: NavHostController, version: Long) 
 
 @Composable
 private fun Side(mine: Boolean, content: @Composable () -> Unit) {
-    Box(Modifier.fillMaxWidth(), contentAlignment = if (mine) Alignment.CenterEnd else Alignment.CenterStart) { content() }
+    Box(Modifier.fillMaxWidth(), contentAlignment = if (mine) Alignment.CenterEnd else Alignment.CenterStart) {
+        Column(horizontalAlignment = if (mine) Alignment.End else Alignment.Start) { content() }
+    }
+}
+
+private val nameColors = listOf(Color(0xFF134074), Color(0xFF0F5A3F), Color(0xFF8A4B08), Color(0xFF6B2D7B), Color(0xFF9B2335))
+
+@Composable
+private fun SenderName(sender: String, names: Map<String, String>) {
+    Text(names[sender] ?: "Former member", color = nameColors[(sender.hashCode() and 0x7fffffff) % nameColors.size],
+        fontWeight = FontWeight.Bold, fontSize = 13.sp)
+}
+
+/** Above photo/voice bubbles in groups: who sent it. */
+@Composable
+private fun Sender(m: LocalMessage, names: Map<String, String>?) {
+    if (!m.mine && names != null) Box(Modifier.padding(start = 6.dp, bottom = 2.dp)) { SenderName(m.sender, names) }
+}
+
+private fun eventText(p: JSONObject, names: Map<String, String>, me: String): String {
+    fun name(id: String) = if (id == me) "You" else names[id] ?: "Someone"
+    val users = p.optJSONArray("users")?.let { a -> (0 until a.length()).map { name(a.getString(it)) } }.orEmpty()
+    val list = when (users.size) {
+        0 -> "someone"
+        1 -> users[0]
+        else -> users.dropLast(1).joinToString(", ") + " and " + users.last()
+    }
+    val by = p.optString("by").takeIf { it.isNotEmpty() }?.let(::name) ?: "An admin"
+    return when (p.optString("type")) {
+        "added" -> "$by added $list"
+        "removed" -> "$by removed $list"
+        "left" -> "$list left"
+        else -> "The group was updated"
+    }
+}
+
+/** Photo: the tiny preview shows at once; the full photo downloads and decrypts on the phone. */
+@Composable
+private fun ImageBubble(p: JSONObject, m: LocalMessage) {
+    val app = LocalApp.current
+    val engine = app.chat ?: return
+    var bitmap by remember(p.optString("blob")) { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var failed by remember { mutableStateOf(false) }
+    var full by remember { mutableStateOf(false) }
+    val thumb = remember(p.optString("thumb")) {
+        runCatching {
+            val bytes = android.util.Base64.decode(p.optString("thumb"), android.util.Base64.NO_WRAP)
+            android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+        }.getOrNull()
+    }
+    LaunchedEffect(p.optString("blob")) {
+        runCatching {
+            val file = engine.mediaFile(p)
+            withContext(Dispatchers.Default) { android.graphics.BitmapFactory.decodeFile(file.path) }
+        }.onSuccess { bitmap = it }.onFailure { failed = true }
+    }
+    val w = p.optInt("w", 4).coerceAtLeast(1)
+    val h = p.optInt("h", 3).coerceAtLeast(1)
+    val ratio = (w.toFloat() / h).coerceIn(0.6f, 1.8f)
+    Column(
+        Modifier.width(240.dp).clip(RoundedCornerShape(16.dp)).background(if (m.mine) Mx.Blue else Color.White).padding(4.dp),
+    ) {
+        Box(
+            Modifier.fillMaxWidth().aspectRatio(ratio).clip(RoundedCornerShape(12.dp)).background(Mx.Slate)
+                .clickable(enabled = bitmap != null) { full = true }.testTag("chat-image"),
+            contentAlignment = Alignment.Center,
+        ) {
+            val shown = bitmap ?: thumb
+            if (shown != null) {
+                androidx.compose.foundation.Image(shown.asImageBitmap(), contentDescription = "Photo", contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize())
+            }
+            if (bitmap == null) {
+                if (failed) Text("Photo expired or unavailable", color = Mx.Muted, fontSize = 12.sp)
+                else androidx.compose.material3.CircularProgressIndicator(Modifier.size(28.dp), color = Color.White, strokeWidth = 3.dp)
+            }
+        }
+        val caption = p.optString("body")
+        if (caption.isNotBlank()) Text(caption, color = if (m.mine) Color.White else Mx.Ink, fontSize = 15.sp,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+        Text(Format.clock(m.at), color = if (m.mine) Mx.OnNavyMuted else Mx.Muted, fontSize = 11.sp,
+            modifier = Modifier.align(Alignment.End).padding(horizontal = 8.dp, vertical = 2.dp))
+    }
+    if (full) bitmap?.let { b ->
+        androidx.compose.ui.window.Dialog(onDismissRequest = { full = false },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+            Box(Modifier.fillMaxSize().background(Color.Black).clickable { full = false }, contentAlignment = Alignment.Center) {
+                androidx.compose.foundation.Image(b.asImageBitmap(), contentDescription = "Photo", contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxSize())
+            }
+        }
+    }
+}
+
+/** Voice note: play/pause, progress and length. Downloads and decrypts on first play. */
+@Composable
+private fun VoiceBubble(p: JSONObject, m: LocalMessage) {
+    val app = LocalApp.current
+    val engine = app.chat ?: return
+    val duration = p.optLong("ms")
+    var playing by remember { mutableStateOf(false) }
+    var loading by remember { mutableStateOf(false) }
+    var position by remember { mutableStateOf(0) }
+    LaunchedEffect(playing) {
+        while (playing) {
+            position = VoicePlayer.positionMs()
+            delay(150)
+        }
+        position = 0
+    }
+    Row(
+        Modifier.width(250.dp).clip(RoundedCornerShape(18.dp)).background(if (m.mine) Mx.Blue else Color.White)
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        IconButton(
+            onClick = {
+                if (playing) { VoicePlayer.stop(); playing = false; return@IconButton }
+                loading = true
+                app.launch(onDone = { loading = false }) {
+                    val file = engine.mediaFile(p)
+                    VoicePlayer.play(file) { playing = false }
+                    playing = true
+                }
+            },
+            modifier = Modifier.size(38.dp).clip(CircleShape).background(if (m.mine) Color.White else Mx.Blue).testTag("play-voice"),
+        ) {
+            if (loading) androidx.compose.material3.CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp,
+                color = if (m.mine) Mx.Blue else Color.White)
+            else Icon(if (playing) Ic.Pause else Ic.Play, if (playing) "Pause" else "Play voice message",
+                tint = if (m.mine) Mx.Blue else Color.White, modifier = Modifier.size(16.dp))
+        }
+        Column(Modifier.weight(1f)) {
+            androidx.compose.material3.LinearProgressIndicator(
+                progress = { if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f },
+                modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                color = if (m.mine) Color.White else Mx.Blue,
+                trackColor = if (m.mine) Mx.OnNavyMuted.copy(alpha = 0.4f) else Mx.Slate,
+            )
+            Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                Text(Payload.formatDuration(if (playing) position.toLong() else duration), fontSize = 11.sp,
+                    color = if (m.mine) Mx.OnNavyMuted else Mx.Muted, modifier = Modifier.weight(1f))
+                Text(Format.clock(m.at), fontSize = 11.sp, color = if (m.mine) Mx.OnNavyMuted else Mx.Muted)
+            }
+        }
+    }
 }
 
 /** Live escrow card for an order shared in the chat (status is fetched from the server). */

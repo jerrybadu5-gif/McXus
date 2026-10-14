@@ -70,6 +70,11 @@ object Ic {
     val DoubleCheck = line("read", "m2 13 4 4 8-9M10 16l1 1 9-10", width = 2.2f)
     val Mic = line("mic", rect(9f, 3f, 6f, 11f, 3f), "M5 11a7 7 0 0 0 14 0M12 18v3")
 
+    val Group = line("group", circle(9f, 8f, 3.5f), "M2.5 20a6.5 6.5 0 0 1 13 0", circle(17f, 9f, 2.5f), "M16 14.2A5 5 0 0 1 21.5 19")
+    val Image = line("image", rect(3f, 4f, 18f, 16f, 3f), circle(9f, 10f, 2f), "m21 16-5-5-9 9")
+    val Stop = solid("stop", "M7 7h10v10H7z")
+    val Pause = solid("pause", "M7 5h3.5v14H7zM13.5 5H17v14h-3.5z")
+    val Close = line("close", "M6 6l12 12M18 6 6 18", width = 2.4f)
     val PinSolid = solid("pin", "M12 2a8 8 0 0 0-8 8c0 5.6 7 11.6 7.3 11.9a1 1 0 0 0 1.4 0C13 21.6 20 15.6 20 10a8 8 0 0 0-8-8Zm0 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z")
     val Locate = line("locate", circle(12f, 12f, 7f), circle(12f, 12f, 2.5f), "M12 2v3M12 19v3M2 12h3M19 12h3")
 

@@ -394,7 +394,7 @@ class ListingReport(TimestampMixin, Base):
 # The server is only a delivery service for MLS (RFC 9420) data: it stores opaque ciphertext and never
 # sees message content. It does see who talks to whom and when (needed for delivery); keep that minimal.
 
-MESSAGE_KINDS = ("welcome", "commit", "application")
+MESSAGE_KINDS = ("welcome", "commit", "application", "event")  # event: server-written group notice
 
 
 class Device(TimestampMixin, Base):
@@ -405,6 +405,7 @@ class Device(TimestampMixin, Base):
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
     name: Mapped[str] = mapped_column(String(60), default="")
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    push_token: Mapped[str | None] = mapped_column(String(512))  # Firebase token; pushes carry no content
 
 
 class KeyPackage(TimestampMixin, Base):
@@ -423,7 +424,7 @@ class KeyPackage(TimestampMixin, Base):
 
 class Conversation(TimestampMixin, Base):
     __tablename__ = "conversations"
-    __table_args__ = (CheckConstraint("kind IN ('direct')", name="kind_valid"),)
+    __table_args__ = (CheckConstraint("kind IN ('direct', 'group')", name="kind_valid"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     kind: Mapped[str] = mapped_column(String(10), default="direct")
@@ -431,6 +432,8 @@ class Conversation(TimestampMixin, Base):
     created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
     listing_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("listings.id"))  # opened from a listing
     mls_ready_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))  # who sent the first Welcome
+    title: Mapped[str | None] = mapped_column(String(80))  # groups only (visible to the server)
+    epoch: Mapped[int] = mapped_column(Integer, default=0, server_default="0")  # groups: accepted MLS changes
     last_message_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
@@ -440,6 +443,7 @@ class ConversationMember(TimestampMixin, Base):
 
     conversation_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("conversations.id"), primary_key=True)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    role: Mapped[str] = mapped_column(String(8), default="member", server_default="member")  # admin | member
 
 
 class MlsMessage(TimestampMixin, Base):
@@ -459,4 +463,19 @@ class MlsMessage(TimestampMixin, Base):
     kind: Mapped[str] = mapped_column(String(12))
     recipient_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))  # Welcomes only
     payload: Mapped[bytes] = mapped_column(LargeBinary)
+    epoch: Mapped[int | None] = mapped_column(Integer)  # commits: the group epoch the change was made in
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class MediaBlob(TimestampMixin, Base):
+    """An encrypted photo or voice note. The phone encrypts it with a fresh key that travels only inside the
+    end-to-end encrypted message, so the server stores bytes it cannot read. Deleted with the messages."""
+
+    __tablename__ = "media_blobs"
+    __table_args__ = (Index("ix_media_blobs_expires", "expires_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    conversation_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("conversations.id"))
+    uploader_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    size: Mapped[int] = mapped_column(Integer)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

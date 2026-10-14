@@ -7,6 +7,10 @@
 //! One-to-one chat: A claims one of B's KeyPackages from the server, creates a two-member MLS group whose
 //! group id is the conversation id, and uploads the Welcome. B joins from the Welcome. After that every
 //! message is an MLS application message (forward secrecy and post-compromise security come from MLS).
+//!
+//! Groups (M3.2, up to 256 people): an admin creates the group alone, then adds people with a Commit (sent to
+//! existing members) and a Welcome (for the new ones). The server accepts only one Commit per epoch, so every
+//! phone applies the same changes in the same order; a phone whose Commit was refused discards it and retries.
 
 use std::collections::HashMap;
 use std::fs;
@@ -27,6 +31,9 @@ uniffi::setup_scaffolding!();
 
 const CIPHERSUITE: Ciphersuite = Ciphersuite::MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519;
 const FILE_MAGIC: &[u8; 6] = b"MCXS01";
+/// Keep message keys for 3 earlier epochs so a message sent just before a membership change still decrypts.
+/// Kept small on purpose: older keys weaken forward secrecy.
+const MAX_PAST_EPOCHS: usize = 3;
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum CryptoError {
@@ -46,6 +53,17 @@ pub struct Decrypted {
     pub plaintext: Option<Vec<u8>>,
     /// The sender's MLS identity (for McXus: "user:<uuid>").
     pub sender: String,
+}
+
+/// A membership change created on this phone, waiting for the server to accept it.
+#[derive(uniffi::Record)]
+pub struct GroupChange {
+    /// Send to the current members (via the server, with `epoch`).
+    pub commit: Vec<u8>,
+    /// Send to the new members (only when people were added).
+    pub welcome: Option<Vec<u8>>,
+    /// The epoch the commit was made in; the server accepts it only if this is still the group's epoch.
+    pub epoch: u64,
 }
 
 #[derive(Default)]
@@ -145,10 +163,7 @@ impl MlsClient {
             .map_err(fail("decode key package"))?
             .validate(inner.provider.crypto(), ProtocolVersion::Mls10)
             .map_err(fail("invalid key package"))?;
-        let config = MlsGroupCreateConfig::builder()
-            .ciphersuite(CIPHERSUITE)
-            .use_ratchet_tree_extension(true)
-            .build();
+        let config = create_config();
         let mut group = MlsGroup::new_with_group_id(
             &inner.provider,
             &inner.signer,
@@ -174,7 +189,10 @@ impl MlsClient {
             MlsMessageBodyIn::Welcome(welcome) => welcome,
             _ => return Err(CryptoError::Failed { reason: "not a Welcome message".into() }),
         };
-        let config = MlsGroupJoinConfig::builder().use_ratchet_tree_extension(true).build();
+        let config = MlsGroupJoinConfig::builder()
+            .use_ratchet_tree_extension(true)
+            .max_past_epochs(MAX_PAST_EPOCHS)
+            .build();
         let group = StagedWelcome::new_from_welcome(&inner.provider, &config, welcome, None)
             .map_err(fail("stage welcome"))?
             .into_group(&inner.provider)
@@ -207,6 +225,10 @@ impl MlsClient {
             .map_err(fail("decode message"))?
             .try_into_protocol_message()
             .map_err(fail("not a group message"))?;
+        if protocol.content_type() == ContentType::Commit && protocol.epoch() < group.epoch() {
+            // A change made before this phone joined (or already applied): nothing to do.
+            return Ok(Decrypted { kind: "old".into(), plaintext: None, sender: String::new() });
+        }
         let processed = group.process_message(&inner.provider, protocol).map_err(fail("decrypt"))?;
         let sender = String::from_utf8_lossy(processed.credential().serialized_content()).into_owned();
         let result = match processed.into_content() {
@@ -215,12 +237,100 @@ impl MlsClient {
             }
             ProcessedMessageContent::StagedCommitMessage(staged) => {
                 group.merge_staged_commit(&inner.provider, *staged).map_err(fail("merge commit"))?;
-                Decrypted { kind: "commit".into(), plaintext: None, sender }
+                // "removed": this phone was taken out of the group and can no longer read it.
+                let kind = if group.is_active() { "commit" } else { "removed" };
+                Decrypted { kind: kind.into(), plaintext: None, sender }
             }
             _ => Decrypted { kind: "other".into(), plaintext: None, sender },
         };
         inner.save()?;
         Ok(result)
+    }
+
+    /// Create a group with only this phone in it (then add people with `add_members`).
+    pub fn create_group(&self, group_id: Vec<u8>) -> Result<(), CryptoError> {
+        let inner = self.lock();
+        MlsGroup::new_with_group_id(
+            &inner.provider,
+            &inner.signer,
+            &create_config(),
+            GroupId::from_slice(&group_id),
+            inner.credential.clone(),
+        )
+        .map_err(fail("create group"))?;
+        inner.save()
+    }
+
+    /// Add people (one claimed KeyPackage each). The change stays pending until `confirm_change` (server
+    /// accepted) or `discard_change` (server refused because someone else changed the group first).
+    pub fn add_members(&self, group_id: Vec<u8>, key_packages: Vec<Vec<u8>>) -> Result<GroupChange, CryptoError> {
+        let inner = self.lock();
+        let mut group = inner.load_group(&group_id)?;
+        let mut packages = Vec::with_capacity(key_packages.len());
+        for bytes in key_packages {
+            packages.push(
+                KeyPackageIn::tls_deserialize_exact(bytes.as_slice())
+                    .map_err(fail("decode key package"))?
+                    .validate(inner.provider.crypto(), ProtocolVersion::Mls10)
+                    .map_err(fail("invalid key package"))?,
+            );
+        }
+        let epoch = group.epoch().as_u64();
+        let (commit, welcome, _info) =
+            group.add_members(&inner.provider, &inner.signer, &packages).map_err(fail("add members"))?;
+        let change = GroupChange {
+            commit: commit.to_bytes().map_err(fail("encode commit"))?,
+            welcome: Some(welcome.to_bytes().map_err(fail("encode welcome"))?),
+            epoch,
+        };
+        inner.save()?;
+        Ok(change)
+    }
+
+    /// Remove people by identity ("user:<uuid>"). Unknown identities are ignored. Pending like `add_members`.
+    pub fn remove_members(&self, group_id: Vec<u8>, identities: Vec<String>) -> Result<GroupChange, CryptoError> {
+        let inner = self.lock();
+        let mut group = inner.load_group(&group_id)?;
+        let leaves: Vec<LeafNodeIndex> = group
+            .members()
+            .filter(|m| identities.iter().any(|id| id.as_bytes() == m.credential.serialized_content()))
+            .map(|m| m.index)
+            .collect();
+        if leaves.is_empty() {
+            return Err(CryptoError::Failed { reason: "none of those people are in the group".into() });
+        }
+        let epoch = group.epoch().as_u64();
+        let (commit, _welcome, _info) =
+            group.remove_members(&inner.provider, &inner.signer, &leaves).map_err(fail("remove members"))?;
+        let change = GroupChange { commit: commit.to_bytes().map_err(fail("encode commit"))?, welcome: None, epoch };
+        inner.save()?;
+        Ok(change)
+    }
+
+    /// The server accepted this phone's pending change: apply it.
+    pub fn confirm_change(&self, group_id: Vec<u8>) -> Result<(), CryptoError> {
+        let inner = self.lock();
+        let mut group = inner.load_group(&group_id)?;
+        group.merge_pending_commit(&inner.provider).map_err(fail("merge commit"))?;
+        inner.save()
+    }
+
+    /// The server refused this phone's pending change (another change came first): drop it.
+    pub fn discard_change(&self, group_id: Vec<u8>) -> Result<(), CryptoError> {
+        let inner = self.lock();
+        let mut group = inner.load_group(&group_id)?;
+        group.clear_pending_commit(inner.provider.storage()).map_err(fail("discard commit"))?;
+        inner.save()
+    }
+
+    /// The group's current epoch (increases by one with every accepted change).
+    pub fn epoch(&self, group_id: Vec<u8>) -> Result<u64, CryptoError> {
+        Ok(self.lock().load_group(&group_id)?.epoch().as_u64())
+    }
+
+    /// False once this phone has been removed from the group.
+    pub fn is_active(&self, group_id: Vec<u8>) -> Result<bool, CryptoError> {
+        Ok(self.lock().load_group(&group_id)?.is_active())
     }
 
     /// Identities of the group's members, e.g. ["user:…", "user:…"].
@@ -252,6 +362,14 @@ impl MlsClient {
         }
         Ok(groups.join(" "))
     }
+}
+
+fn create_config() -> MlsGroupCreateConfig {
+    MlsGroupCreateConfig::builder()
+        .ciphersuite(CIPHERSUITE)
+        .use_ratchet_tree_extension(true)
+        .max_past_epochs(MAX_PAST_EPOCHS)
+        .build()
 }
 
 impl MlsClient {
@@ -388,6 +506,85 @@ mod tests {
         let last = c.len() - 1;
         c[last] ^= 0x01;
         assert!(bob.decrypt(group, c).is_err(), "a modified message is rejected");
+    }
+
+    /// Simulates the delivery service: one accepted change per epoch, delivered in order.
+    fn deliver(change: &GroupChange, to: &[&Arc<MlsClient>], group: &[u8]) {
+        for c in to {
+            let d = c.decrypt(group.to_vec(), change.commit.clone()).unwrap();
+            assert!(d.kind == "commit" || d.kind == "removed" || d.kind == "old");
+        }
+    }
+
+    #[test]
+    fn group_add_talk_remove() {
+        let dir = tempfile::tempdir().unwrap();
+        let (admin, bob, cara, dan) = (client(&dir, "admin"), client(&dir, "bob"), client(&dir, "cara"), client(&dir, "dan"));
+        let g = b"group-1".to_vec();
+        admin.create_group(g.clone()).unwrap();
+        assert_eq!(admin.epoch(g.clone()).unwrap(), 0);
+
+        // Admin adds Bob and Cara in one change.
+        let kps = vec![bob.key_packages(1).unwrap().remove(0), cara.key_packages(1).unwrap().remove(0)];
+        let add = admin.add_members(g.clone(), kps).unwrap();
+        assert_eq!(add.epoch, 0);
+        admin.confirm_change(g.clone()).unwrap();
+        let welcome = add.welcome.clone().unwrap();
+        bob.join(welcome.clone()).unwrap();
+        cara.join(welcome).unwrap();
+        assert_eq!(bob.members(g.clone()).unwrap().len(), 3);
+        // The first commit predates Bob joining: harmless if it reaches him.
+        assert_eq!(bob.decrypt(g.clone(), add.commit.clone()).unwrap().kind, "old");
+
+        let hello = cara.encrypt(g.clone(), b"Moning everyone".to_vec()).unwrap();
+        assert_eq!(admin.decrypt(g.clone(), hello.clone()).unwrap().plaintext.unwrap(), b"Moning everyone");
+        assert_eq!(bob.decrypt(g.clone(), hello).unwrap().sender, "user:cara");
+
+        // Add Dan later: existing members apply the commit, Dan joins from the Welcome.
+        let add_dan = admin.add_members(g.clone(), vec![dan.key_packages(1).unwrap().remove(0)]).unwrap();
+        assert_eq!(add_dan.epoch, 1);
+        admin.confirm_change(g.clone()).unwrap();
+        deliver(&add_dan, &[&bob, &cara], &g);
+        dan.join(add_dan.welcome.unwrap()).unwrap();
+        let m = dan.encrypt(g.clone(), b"Tenkyu for adding me".to_vec()).unwrap();
+        assert_eq!(bob.decrypt(g.clone(), m).unwrap().plaintext.unwrap(), b"Tenkyu for adding me");
+
+        // Remove Cara: she learns she was removed and cannot read new messages.
+        let rm = admin.remove_members(g.clone(), vec!["user:cara".into()]).unwrap();
+        admin.confirm_change(g.clone()).unwrap();
+        deliver(&rm, &[&bob, &dan], &g);
+        assert_eq!(cara.decrypt(g.clone(), rm.commit.clone()).unwrap().kind, "removed");
+        assert!(!cara.is_active(g.clone()).unwrap());
+        let secret = bob.encrypt(g.clone(), b"after Cara left".to_vec()).unwrap();
+        assert!(cara.decrypt(g.clone(), secret.clone()).is_err());
+        assert_eq!(dan.decrypt(g.clone(), secret).unwrap().plaintext.unwrap(), b"after Cara left");
+        let mut members = admin.members(g.clone()).unwrap();
+        members.sort();
+        assert_eq!(members, vec!["user:admin", "user:bob", "user:dan"]);
+    }
+
+    #[test]
+    fn refused_change_is_discarded_and_late_messages_still_decrypt() {
+        let dir = tempfile::tempdir().unwrap();
+        let (a, b, c, d) = (client(&dir, "a"), client(&dir, "b"), client(&dir, "c"), client(&dir, "d"));
+        let g = b"group-2".to_vec();
+        a.create_group(g.clone()).unwrap();
+        let add = a.add_members(g.clone(), vec![b.key_packages(1).unwrap().remove(0)]).unwrap();
+        a.confirm_change(g.clone()).unwrap();
+        b.join(add.welcome.unwrap()).unwrap();
+
+        // B sends a message, then A adds C before B's message arrives at A: still readable (past epoch).
+        let early = b.encrypt(g.clone(), b"sent before the change".to_vec()).unwrap();
+        let add_c = a.add_members(g.clone(), vec![c.key_packages(1).unwrap().remove(0)]).unwrap();
+        // At the same moment B tries to add D, also at epoch 1. The server accepts A's change first and
+        // refuses B's (same epoch), so B discards its pending change and applies A's.
+        let competing = b.add_members(g.clone(), vec![d.key_packages(1).unwrap().remove(0)]).unwrap();
+        assert_eq!(competing.epoch, add_c.epoch);
+        b.discard_change(g.clone()).unwrap();
+        a.confirm_change(g.clone()).unwrap();
+        deliver(&add_c, &[&b], &g);
+        assert_eq!(a.decrypt(g.clone(), early).unwrap().plaintext.unwrap(), b"sent before the change");
+        assert_eq!(a.epoch(g.clone()).unwrap(), b.epoch(g.clone()).unwrap());
     }
 
     #[test]

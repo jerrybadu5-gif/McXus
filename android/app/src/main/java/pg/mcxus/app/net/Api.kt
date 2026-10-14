@@ -35,6 +35,33 @@ class Api(private val session: Session) {
     suspend fun put(path: String, body: JSONObject): JSONObject =
         JSONObject(call("PUT", path, body.toString().toByteArray(), "application/json"))
 
+    /** Upload raw bytes (an encrypted chat photo or voice note). */
+    suspend fun postBytes(path: String, bytes: ByteArray): JSONObject =
+        JSONObject(call("POST", path, bytes, "application/octet-stream"))
+
+    /** Download raw bytes (an encrypted chat file). */
+    suspend fun getBytes(path: String): ByteArray = withContext(Dispatchers.IO) {
+        val conn = open(path)
+        try {
+            conn.requestMethod = "GET"
+            val status = conn.responseCode
+            if (status >= 400) throw parseError(status, conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "")
+            conn.inputStream.use { it.readBytes() }
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    private fun open(path: String): HttpURLConnection {
+        val base = session.server.trimEnd('/')
+        if (base.isEmpty()) throw IOException("No server set")
+        return (URL(base + path).openConnection() as HttpURLConnection).apply {
+            connectTimeout = 15_000
+            readTimeout = 60_000
+            session.token?.let { setRequestProperty("Authorization", "Bearer $it") }
+        }
+    }
+
     /** Upload one JPEG as multipart/form-data field "file". */
     suspend fun upload(path: String, jpeg: ByteArray, filename: String = "photo.jpg"): JSONObject {
         val boundary = "----mcxus" + UUID.randomUUID().toString().replace("-", "")

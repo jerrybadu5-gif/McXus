@@ -1,6 +1,7 @@
 package pg.mcxus.app
 
 import android.app.Activity
+import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import android.view.WindowManager
@@ -19,11 +20,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -31,7 +33,9 @@ import androidx.navigation.compose.rememberNavController
 import pg.mcxus.app.ui.screens.ChatScreen
 import pg.mcxus.app.ui.screens.HomeScreen
 import pg.mcxus.app.ui.screens.ListingScreen
+import pg.mcxus.app.ui.screens.GroupInfoScreen
 import pg.mcxus.app.ui.screens.NewChatScreen
+import pg.mcxus.app.ui.screens.NewGroupScreen
 import pg.mcxus.app.ui.screens.OrderScreen
 import pg.mcxus.app.ui.screens.OrdersScreen
 import pg.mcxus.app.ui.screens.ProfileScreen
@@ -50,18 +54,36 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.light(Color.WHITE, Color.WHITE),
         )
         super.onCreate(savedInstanceState)
-        app = App(this, lifecycleScope)
+        app = (application as McXusApp).app
         if (app.signedIn) app.startChat()
+        pendingChat.value = intent?.getStringExtra(EXTRA_CHAT)
         setContent {
             McXusTheme {
-                CompositionLocalProvider(LocalApp provides app) { Root() }
+                CompositionLocalProvider(LocalApp provides app) { Root(pendingChat) }
             }
         }
     }
 
-    override fun onDestroy() {
-        if (isFinishing) app.chat?.stop()
-        super.onDestroy()
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        pendingChat.value = intent.getStringExtra(EXTRA_CHAT)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        app.inForeground = true
+    }
+
+    override fun onStop() {
+        app.inForeground = false
+        super.onStop()
+    }
+
+    /** Chat to open when the person taps a notification. */
+    private val pendingChat = mutableStateOf<String?>(null)
+
+    companion object {
+        const val EXTRA_CHAT = "chat"
     }
 }
 
@@ -72,17 +94,24 @@ object Routes {
     fun listing(id: String) = "listing/$id"
     fun order(id: String) = "order/$id"
     const val NEW_CHAT = "newchat"
+    const val NEW_GROUP = "newgroup"
+    fun group(id: String) = "group/$id"
     const val SELL = "sell"
     const val ORDERS = "orders"
     const val PROFILE = "profile"
 }
 
 @Composable
-private fun Root() {
+private fun Root(pendingChat: MutableState<String?>) {
     val app = LocalApp.current
     val nav = rememberNavController()
     LaunchedEffect(app.signedIn) {
         if (!app.signedIn) nav.navigate(Routes.SIGN_IN) { popUpTo(0) }
+    }
+    LaunchedEffect(pendingChat.value, app.signedIn) {
+        val chat = pendingChat.value ?: return@LaunchedEffect
+        if (app.signedIn) nav.navigate(Routes.chat(chat))
+        pendingChat.value = null
     }
     Box(Modifier.fillMaxSize()) {
         NavHost(nav, startDestination = if (app.signedIn) Routes.HOME else Routes.SIGN_IN, modifier = Modifier.imePadding()) {
@@ -92,6 +121,8 @@ private fun Root() {
             composable("listing/{id}") { ListingScreen(nav, it.arguments?.getString("id")!!) }
             composable("order/{id}") { OrderScreen(nav, it.arguments?.getString("id")!!) }
             composable(Routes.NEW_CHAT) { NewChatScreen(nav) }
+            composable(Routes.NEW_GROUP) { NewGroupScreen(nav) }
+            composable("group/{id}") { GroupInfoScreen(nav, it.arguments?.getString("id")!!) }
             composable(Routes.SELL) { SellScreen(nav) }
             composable(Routes.ORDERS) { OrdersScreen(nav) }
             composable(Routes.PROFILE) { ProfileScreen(nav) }

@@ -51,6 +51,20 @@ class PhoneSmokeTest {
             val d = bob.decrypt(gid, alice.encrypt(gid, "Moning from the phone".toByteArray()))
             assertEquals("Moning from the phone", String(d.plaintext!!))
             assertEquals(alice.safetyNumber(gid), bob.safetyNumber(gid))
+
+            // Group of three on this phone's CPU: add, talk, remove.
+            val cara = MlsClient.open(File(dir, "c.bin").path, "user:cara")
+            val g = "smoke-group".toByteArray()
+            alice.createGroup(g)
+            val add = alice.addMembers(g, listOf(bob.keyPackages(1u).single(), cara.keyPackages(1u).single()))
+            alice.confirmChange(g)
+            bob.join(add.welcome!!)
+            cara.join(add.welcome!!)
+            assertEquals("Moning olgeta", String(cara.decrypt(g, bob.encrypt(g, "Moning olgeta".toByteArray())).plaintext!!))
+            val rm = alice.removeMembers(g, listOf("user:cara"))
+            alice.confirmChange(g)
+            bob.decrypt(g, rm.commit)
+            assertEquals("removed", cara.decrypt(g, rm.commit).kind)
         } finally {
             dir.deleteRecursively()
         }

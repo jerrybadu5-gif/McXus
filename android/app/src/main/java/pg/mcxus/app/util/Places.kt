@@ -125,10 +125,10 @@ object Places {
         } else {
             Uri.parse("geo:0,0?q=${Uri.encode(place.address + ", Papua New Guinea")}")
         }
-        val intent = Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        if (intent.resolveActivity(context.packageManager) != null) {
-            context.startActivity(intent)
-        } else {
+        try {
+            context.startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (e: android.content.ActivityNotFoundException) {
+            // No maps app installed: open the map in the browser instead.
             val web = if (place.hasPoint) "https://www.openstreetmap.org/?mlat=${place.latitude}&mlon=${place.longitude}#map=17/${place.latitude}/${place.longitude}"
             else "https://www.openstreetmap.org/search?query=${Uri.encode(place.address)}"
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(web)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

@@ -41,11 +41,11 @@ def run_timers(session_factory: sessionmaker[Session] | None = None) -> dict[str
 
 
 def purge_messages(session_factory: sessionmaker[Session] | None = None) -> int:
-    """Delete encrypted messages older than MCXUS_MESSAGE_TTL_DAYS (never touches financial records)."""
-    from app.messaging.service import purge_expired
+    """Delete encrypted messages and chat files older than MCXUS_MESSAGE_TTL_DAYS (never touches money records)."""
+    from app.messaging.service import purge_expired, purge_expired_blobs
 
     with (session_factory or get_sessionmaker())() as db:
-        removed = purge_expired(db)
+        removed = purge_expired(db) + purge_expired_blobs(db)
         db.commit()
     return removed
 
