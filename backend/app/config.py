@@ -57,6 +57,12 @@ class Settings(BaseSettings):
     thumb_max_px: int = 320
     reports_to_auto_hide: int = 3  # distinct open reports that hide a listing until a moderator decides
 
+    # Messaging (M3)
+    message_ttl_days: int = 30  # encrypted messages waiting for an offline phone are deleted after this
+    max_message_bytes: int = 64 * 1024
+    max_key_packages_per_device: int = 100
+    sync_max_wait_seconds: int = 25  # long-poll: how long /messages/sync waits for something new
+
     @model_validator(mode="after")
     def _prod_guards(self) -> "Settings":
         if self.env == "prod":

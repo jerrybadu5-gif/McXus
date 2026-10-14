@@ -1,4 +1,5 @@
-"""Background worker: applies escrow timers (20-minute accept window, 7-day auto-release).
+"""Background worker: applies escrow timers (20-minute accept window, 7-day auto-release) and deletes
+expired encrypted messages (30 days).
 
 Run with:  python -m app.jobs        (loops every MCXUS_WORKER_INTERVAL_SECONDS)
            python -m app.jobs --once
@@ -39,6 +40,16 @@ def run_timers(session_factory: sessionmaker[Session] | None = None) -> dict[str
     return results
 
 
+def purge_messages(session_factory: sessionmaker[Session] | None = None) -> int:
+    """Delete encrypted messages older than MCXUS_MESSAGE_TTL_DAYS (never touches financial records)."""
+    from app.messaging.service import purge_expired
+
+    with (session_factory or get_sessionmaker())() as db:
+        removed = purge_expired(db)
+        db.commit()
+    return removed
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--once", action="store_true", help="run one pass and exit")
@@ -48,6 +59,9 @@ def main() -> None:
         results = run_timers()
         if results:
             log.info("Timers applied: %s", results)
+        purged = purge_messages()
+        if purged:
+            log.info("Expired messages deleted: %s", purged)
         if args.once:
             break
         time.sleep(get_settings().worker_interval_seconds)

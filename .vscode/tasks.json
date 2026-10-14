@@ -1,0 +1,84 @@
+{
+  // McXus tasks. Run with Ctrl+Shift+P > "Tasks: Run Task", or Terminal > Run Task...
+  // Ctrl+Shift+B runs the default build task: build, install and open McXus on the USB phone.
+  "version": "2.0.0",
+  "inputs": [
+    {
+      "id": "server",
+      "type": "promptString",
+      "description": "Server for the phone chat test: 'usb' = this laptop over the USB cable, a URL like http://192.168.1.20:8000, or empty to skip",
+      "default": "usb"
+    }
+  ],
+  "tasks": [
+    {
+      "label": "McXus: start backend (Docker)",
+      "type": "shell",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ${workspaceFolder}/start-dev.ps1 -Lan",
+      "problemMatcher": []
+    },
+    {
+      "label": "McXus: backend tests",
+      "type": "shell",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ${workspaceFolder}/run-tests.ps1",
+      "problemMatcher": []
+    },
+    {
+      "label": "McXus: API smoke test",
+      "type": "shell",
+      "command": "python ${workspaceFolder}/scripts/smoke_test.py",
+      "problemMatcher": []
+    },
+    {
+      "label": "Android: one-time setup (Java 17 + Android SDK)",
+      "type": "shell",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ${workspaceFolder}/scripts/setup-android-windows.ps1",
+      "problemMatcher": []
+    },
+    {
+      "label": "Android: check phone (USB)",
+      "type": "shell",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ${workspaceFolder}/scripts/phone.ps1 check",
+      "problemMatcher": []
+    },
+    {
+      "label": "Android: build APK",
+      "type": "shell",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ${workspaceFolder}/scripts/phone.ps1 build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Android: install & open on phone (USB)",
+      "type": "shell",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ${workspaceFolder}/scripts/phone.ps1 install",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Android: smoke test on phone (USB)",
+      "type": "shell",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ${workspaceFolder}/scripts/phone.ps1 test -Server '${input:server}'",
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Android: unit tests (laptop)",
+      "type": "shell",
+      "command": "${workspaceFolder}/android/gradlew.bat -p ${workspaceFolder}/android testDebugUnitTest lintDebug",
+      "problemMatcher": []
+    },
+    {
+      "label": "Android: live log from phone",
+      "type": "shell",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ${workspaceFolder}/scripts/phone.ps1 log",
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Android: USB link to laptop server",
+      "type": "shell",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ${workspaceFolder}/scripts/phone.ps1 reverse",
+      "problemMatcher": []
+    }
+  ]
+}

@@ -6,8 +6,8 @@ import android.content.Context
  * Who is signed in and which server to talk to. Stored in this app's private storage (other apps cannot
  * read it; backups are switched off in the manifest). Handover PINs are kept in memory only.
  */
-class Session(context: Context) {
-    private val prefs = context.getSharedPreferences("mcxus", Context.MODE_PRIVATE)
+class Session(context: Context, name: String = "mcxus") {
+    private val prefs = context.getSharedPreferences(name, Context.MODE_PRIVATE)
 
     var server: String
         get() = prefs.getString("server", "") ?: ""

@@ -76,3 +76,14 @@ Listing status: `active` → `sold_out` (stock 0) / `paused` / `closed` (seller)
 
 Stock: reserved inside the pay transaction under a row lock on the listing (first payer wins); released inside
 the same transaction as any refund. See ADR 0006.
+
+## Messaging (M3)
+
+Tables: `devices`, `key_packages` (one-time, claimed with `FOR UPDATE SKIP LOCKED`), `conversations`
+(`kind=direct`, unique `pair_key`, `mls_ready_by` = who sent the accepted Welcome, optional `listing_id`),
+`conversation_members`, `mls_messages` (`welcome` | `commit` | `application`, opaque bytes, `expires_at` = +30 days).
+Welcomes are visible only to their recipient. The worker deletes expired messages; money records are never touched.
+
+API: `POST /v1/devices`, `POST /v1/keys`, `GET /v1/keys/count`, `POST /v1/keys/claim`, `POST /v1/users/lookup`,
+`POST|GET /v1/conversations`, `POST /v1/conversations/{id}/welcome`, `POST /v1/conversations/{id}/messages`,
+`GET /v1/messages/sync?after=&wait=` (long-poll, max 25 s). Phone side: `chat/ChatEngine.kt`. Details: ADR 0008.

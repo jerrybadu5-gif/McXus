@@ -17,6 +17,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     Numeric,
     SmallInteger,
     String,
@@ -379,3 +380,75 @@ class ListingReport(TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(10), default="open")
     decided_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+# ---------- messaging (module M3) ----------
+# The server is only a delivery service for MLS (RFC 9420) data: it stores opaque ciphertext and never
+# sees message content. It does see who talks to whom and when (needed for delivery); keep that minimal.
+
+MESSAGE_KINDS = ("welcome", "commit", "application")
+
+
+class Device(TimestampMixin, Base):
+    __tablename__ = "devices"
+    __table_args__ = (Index("ix_devices_user", "user_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    name: Mapped[str] = mapped_column(String(60), default="")
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class KeyPackage(TimestampMixin, Base):
+    """One-time MLS KeyPackage a device publishes so others can start an encrypted chat with it."""
+
+    __tablename__ = "key_packages"
+    __table_args__ = (Index("ix_key_packages_user_unclaimed", "user_id", "claimed_at", "id"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    device_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("devices.id"))
+    data: Mapped[bytes] = mapped_column(LargeBinary)
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    claimed_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+
+
+class Conversation(TimestampMixin, Base):
+    __tablename__ = "conversations"
+    __table_args__ = (CheckConstraint("kind IN ('direct')", name="kind_valid"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    kind: Mapped[str] = mapped_column(String(10), default="direct")
+    pair_key: Mapped[str | None] = mapped_column(String(80), unique=True)  # direct chats: one per pair of users
+    created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    listing_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("listings.id"))  # opened from a listing
+    mls_ready_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))  # who sent the first Welcome
+    last_message_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ConversationMember(TimestampMixin, Base):
+    __tablename__ = "conversation_members"
+    __table_args__ = (Index("ix_conversation_members_user", "user_id"),)
+
+    conversation_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("conversations.id"), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), primary_key=True)
+
+
+class MlsMessage(TimestampMixin, Base):
+    """Opaque MLS message. `id` is the global delivery order and the sync cursor. Deleted after expiry."""
+
+    __tablename__ = "mls_messages"
+    __table_args__ = (
+        CheckConstraint(_in("kind", MESSAGE_KINDS), name="kind_valid"),
+        Index("ix_mls_messages_conversation", "conversation_id", "id"),
+        Index("ix_mls_messages_expires", "expires_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    conversation_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("conversations.id"))
+    sender_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    sender_device_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("devices.id"))
+    kind: Mapped[str] = mapped_column(String(12))
+    recipient_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))  # Welcomes only
+    payload: Mapped[bytes] = mapped_column(LargeBinary)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
