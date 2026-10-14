@@ -14,7 +14,7 @@ from app.config import get_settings
 from app.errors import AppError, Conflict, Forbidden, NotFound
 from app.escrow import service as escrow
 from app.marketplace import media, moderation, trust
-from app.models import Category, Listing, ListingPhoto, ListingReport, Location, Order, Review, User
+from app.models import Category, Listing, ListingPhoto, ListingReport, Location, Order, OrderEvent, Review, User
 
 PUBLIC_STATUSES = ("active", "sold_out")
 SELLER_EDITABLE = ("active", "paused", "sold_out")
@@ -105,6 +105,24 @@ class ListingInput:
     suburb_id: int | None = None
     latitude: Decimal | None = None
     longitude: Decimal | None = None
+    meetup_address: str = ""
+
+
+@dataclass
+class DeliveryPlace:
+    """How and where an order changes hands. GPS point first; the address/landmark helps people find it."""
+
+    method: str
+    latitude: Decimal | None = None
+    longitude: Decimal | None = None
+    address: str = ""
+
+
+def _check_point(latitude: Decimal | None, longitude: Decimal | None, address: str) -> None:
+    if (latitude is None) != (longitude is None):
+        raise AppError("Send both latitude and longitude, or neither", code="invalid_location")
+    if address:
+        moderation.check_listing_text("", address)
 
 
 def create_listing(db: Session, seller: User, data: ListingInput) -> Listing:
@@ -125,6 +143,7 @@ def create_listing(db: Session, seller: User, data: ListingInput) -> Listing:
         suburb_id=data.suburb_id,
         latitude=data.latitude,
         longitude=data.longitude,
+        meetup_address=data.meetup_address.strip(),
         status="active",
     )
     db.add(listing)
@@ -139,6 +158,7 @@ def _validate(db: Session, data: ListingInput) -> None:
     bad = set(data.delivery_options) - set(DELIVERY_OPTIONS)
     if bad or not data.delivery_options:
         raise AppError(f"Delivery options must be from {', '.join(DELIVERY_OPTIONS)}", code="invalid_delivery")
+    _check_point(data.latitude, data.longitude, data.meetup_address)
 
 
 def get_listing(db: Session, listing_id: uuid.UUID, viewer: User | None = None, *, lock: bool = False) -> Listing:
@@ -175,6 +195,7 @@ def update_listing(db: Session, seller: User, listing_id: uuid.UUID, data: Listi
     listing.delivery_options = data.delivery_options
     listing.province_id, listing.district_id, listing.suburb_id = data.province_id, data.district_id, data.suburb_id
     listing.latitude, listing.longitude = data.latitude, data.longitude
+    listing.meetup_address = data.meetup_address.strip()
     listing.quantity_available = data.quantity
     if data.quantity == 0 and listing.status == "active":
         listing.status = "sold_out"
@@ -308,14 +329,31 @@ def search(db: Session, f: SearchFilters) -> list[Listing]:
 # ---------- buying ----------
 
 
-def buy(db: Session, buyer: User, listing_id: uuid.UUID, quantity: int) -> Order:
-    """Create an order from a listing. Stock is taken when the buyer pays (first to pay wins)."""
+DELIVERED_TO_BUYER = ("seller_delivers", "courier")
+
+
+def buy(db: Session, buyer: User, listing_id: uuid.UUID, quantity: int, delivery: DeliveryPlace | None = None) -> Order:
+    """Create an order from a listing. Stock is taken when the buyer pays (first to pay wins).
+
+    Delivery: for meet-up/pickup the seller's meet-up point is used unless the buyer proposes another; for
+    seller delivery/courier the buyer must give a GPS point or an address."""
     listing = get_listing(db, listing_id, buyer)
     if listing.status != "active":
         raise Conflict("This item is no longer available", code="sold_out")
     if quantity < 1 or quantity > listing.quantity_available:
         raise Conflict(f"Only {listing.quantity_available} available", code="not_enough_stock")
-    return escrow.create_order(
+    place = delivery or DeliveryPlace(method=listing.delivery_options[0] if listing.delivery_options else "meetup")
+    if place.method not in listing.delivery_options:
+        raise AppError("The seller does not offer that delivery option", code="delivery_not_offered")
+    _check_point(place.latitude, place.longitude, place.address)
+    has_point = place.latitude is not None or bool(place.address.strip())
+    if place.method in DELIVERED_TO_BUYER and not has_point:
+        raise AppError(
+            "Give your delivery location (use your GPS or type an address)", code="delivery_location_required"
+        )
+    if place.method not in DELIVERED_TO_BUYER and not has_point:
+        place = DeliveryPlace(place.method, listing.latitude, listing.longitude, listing.meetup_address)
+    order = escrow.create_order(
         db,
         buyer,
         listing.seller_id,
@@ -324,6 +362,38 @@ def buy(db: Session, buyer: User, listing_id: uuid.UUID, quantity: int) -> Order
         listing_id=listing.id,
         quantity=quantity,
     )
+    order.delivery_method = place.method
+    order.delivery_latitude, order.delivery_longitude = place.latitude, place.longitude
+    order.delivery_address = place.address.strip()
+    return order
+
+
+def set_delivery_place(
+    db: Session, user: User, order_id: uuid.UUID, latitude: Decimal | None, longitude: Decimal | None, address: str
+) -> Order:
+    """Buyer or seller moves the handover point (e.g. "meet at the BSP ATM instead") while the order is open."""
+    order = escrow.get_order(db, order_id, lock=True)
+    if user.id not in (order.buyer_id, order.seller_id):
+        raise NotFound("Order not found")
+    if order.closed_at is not None:
+        raise Conflict("This order is closed", code="order_closed")
+    _check_point(latitude, longitude, address)
+    if latitude is None and not address.strip():
+        raise AppError("Give a GPS point or an address", code="delivery_location_required")
+    order.delivery_latitude, order.delivery_longitude = latitude, longitude
+    order.delivery_address = address.strip()
+    db.add(
+        OrderEvent(
+            order_id=order.id,
+            from_status=order.status,
+            to_status=order.status,
+            actor_id=user.id,
+            reason="delivery location changed",
+            data={},
+            created_at=clock.now(),
+        )
+    )
+    return order
 
 
 # ---------- reviews and sellers ----------

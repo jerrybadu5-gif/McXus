@@ -402,7 +402,9 @@ def test_marketplace_over_http(client, db, users):
     assert len(client.get("/v1/locations").json()) == 22
     # buy and pay
     order = client.post(
-        f"/v1/listings/{listing['id']}/buy", json={"quantity": 2}, headers={**auth(buyer), "Idempotency-Key": "buy-1"}
+        f"/v1/listings/{listing['id']}/buy",
+        json={"quantity": 2, "delivery": {"method": "seller_delivers", "address": "North Goroka, near the school"}},
+        headers={**auth(buyer), "Idempotency-Key": "buy-1"},
     ).json()
     assert order["amount"] == "170.00" and order["listing_id"] == listing["id"]
     paid = client.post(f"/v1/orders/{order['id']}/pay", headers=auth(buyer)).json()

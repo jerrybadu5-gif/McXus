@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from app.api.chat_routes import router as chat_router
 from app.api.market_routes import router as market_router
 from app.api.routes import router
 from app.config import get_settings
@@ -48,6 +49,7 @@ def health() -> dict[str, object]:
 
 app.include_router(router)
 app.include_router(market_router)
+app.include_router(chat_router)
 
 # Listing photos (public). Replaced by object storage + CDN before launch.
 os.makedirs(settings.media_dir, exist_ok=True)

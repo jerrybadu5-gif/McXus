@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lint>
+    <!-- Generated OpenMLS bindings: java.lang.ref.Cleaner is only used after a runtime check
+         (Class.forName); older phones fall back to JNA's cleaner. -->
+    <issue id="NewApi">
+        <ignore path="src/main/java/uniffi/**" />
+    </issue>
+</lint>

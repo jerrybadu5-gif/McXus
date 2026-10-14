@@ -3,7 +3,7 @@
 Privacy-first super app for Papua New Guinea and the Pacific: private messaging, a marketplace, and Stars
 payments protected by escrow.
 
-> **Status: M1 money core (passed) + M2 marketplace and Android preview (in review) — sandbox.** Test Stars only; no real money moves until a licensed issuer
+> **Status: M1 money core and M2 marketplace (passed) + M3 encrypted chat and Compose app (in review) — sandbox.** Test Stars only; no real money moves until a licensed issuer
 > partner is connected (see [ADR 0001](docs/decisions/0001-stars-as-e-money-sandbox-first.md)).
 
 ## What is in this module
@@ -16,6 +16,9 @@ payments protected by escrow.
 | Escrow | Order state machine: pay → seller accepts within 20 min → dispatch → handover PIN / buyer confirms / auto-release after 7 days; cancellations, penalties, disputes with partial refunds |
 | Worker | Applies the 20-minute and 7-day timers every 30 seconds |
 | Marketplace (M2) | Listings with up to 5 photos, PNG provinces/districts/suburbs, search, first-buyer-to-pay stock reservation, ratings, seller trust badges, reports and moderation |
+| Messaging (M3) | End-to-end encrypted 1:1 chats (OpenMLS / MLS RFC 9420): the server relays and stores ciphertext only, 30-day expiry, long-poll delivery; chat with a seller from any listing |
+| Android app (M3) | Jetpack Compose: Chats · Discover · Market · Wallet · Me, escrow order cards in chat, handover QR + PIN |
+| Places (M3.1) | Meet-up / delivery points: GPS (current location or map) first, landmark second; on listings, orders and in chat (ADR 0009) |
 
 1 Star = K1. All amounts are exact decimals, sent and returned as strings (`"150.00"`).
 
@@ -36,9 +39,10 @@ docker compose exec api python -m app.cli dev-token 70000001
 Demo users: buyer `70000001`, seller `70000002`, finance A `70000003`, finance B `70000004`,
 mediator `70000005`, admin `70000006`. Step-by-step review: [docs/TESTING-GUIDE.md](docs/TESTING-GUIDE.md).
 
-## Android app (preview)
+## Android app
 
-See [android/README.md](android/README.md): run `.\start-dev.ps1 -Lan`, install `mcxus-preview.apk` on a phone on the same Wi-Fi.
+Open the folder in VS Code, plug in the phone (USB debugging on) and press **Ctrl+Shift+B** to build, install and
+open McXus. All tasks and the phone smoke test: [android/README.md](android/README.md).
 
 ## Configuration
 
@@ -55,12 +59,16 @@ backend/app/
   escrow/service.py    order state machine and all escrow money movements
   escrow/fees.py       fee rules (pure functions)
   marketplace/         listings, search, photos, stock, reviews, trust, moderation
+  messaging/           MLS delivery service: devices, key packages, conversations, ciphertext relay
   auth/                phone OTP, JWT, role checks
   api/                 HTTP routes and request/response schemas
   jobs.py              timer worker
   cli.py               make-admin, seed-demo, dev-token
-backend/migrations/    Alembic (0001 money core; 0002 marketplace + PNG locations/categories seed in migrations/data)
-backend/tests/         87 tests against real PostgreSQL
+backend/migrations/    Alembic (0001 money core; 0002 marketplace + PNG seed data; 0003 messaging; 0004 locations)
+backend/tests/         105 tests against real PostgreSQL
+crypto/                Rust: OpenMLS wrapper + Kotlin bindings (UniFFI) for the app
+android/               Kotlin + Jetpack Compose app
+.vscode/tasks.json     build / install / test on a USB phone from VS Code
 docs/                  architecture, decisions (ADRs), testing guide
 ```
 

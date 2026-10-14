@@ -69,4 +69,15 @@ class ApiErrorTest {
         val e = Api.parseError(502, "<html>Bad gateway</html>")
         assertEquals("Server error (502)", e.message)
     }
+
+    @Test
+    fun chatListTimes() {
+        val now = java.time.ZonedDateTime.of(2026, 10, 14, 12, 0, 0, 0, Format.PNG)
+        fun at(day: Int, h: Int) = java.time.ZonedDateTime.of(2026, 10, day, h, 42, 0, 0, Format.PNG).toInstant().toEpochMilli()
+        assertEquals("10:42", Format.chatTime(at(14, 10), now))
+        assertEquals("Yesterday", Format.chatTime(at(13, 23), now))
+        assertEquals("Sun", Format.chatTime(at(11, 9), now))
+        assertEquals("01/10/26", Format.chatTime(at(1, 9), now))
+        assertEquals("", Format.chatTime(0, now))
+    }
 }

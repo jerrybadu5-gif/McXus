@@ -34,22 +34,34 @@ jobs:
       - run: pytest -W ignore::DeprecationWarning
       - run: pip-audit --skip-editable
 
-  android:
+  crypto:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: android
+        working-directory: crypto
     steps:
       - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --locked
+      - run: cargo test --locked --release
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      # Laptop build of the encryption library so the JVM tests can exercise the real bindings.
+      - run: cargo build --locked --manifest-path crypto/Cargo.toml
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew testDebugUnitTest lintDebug assembleDebug
+      - working-directory: android
+        run: ./gradlew testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
       - uses: actions/upload-artifact@v4
         with:
-          name: mcxus-preview-apk
+          name: mcxus-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
 
   docker:

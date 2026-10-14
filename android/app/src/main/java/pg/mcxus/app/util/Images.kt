@@ -11,13 +11,10 @@ import android.graphics.Matrix
 import android.media.ExifInterface
 import android.net.Uri
 import android.util.LruCache
-import android.widget.ImageView
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
@@ -28,24 +25,20 @@ object Images {
         override fun sizeOf(key: String, value: Bitmap) = value.byteCount
     }
 
-    /** Load a listing photo into [view] (cached in memory; the server sends week-long cache headers). */
-    fun into(scope: CoroutineScope, view: ImageView, url: String) {
-        cache.get(url)?.let { view.setImageBitmap(it); return }
-        view.tag = url
-        scope.launch {
-            val bitmap = withContext(Dispatchers.IO) {
-                runCatching {
-                    val conn = URL(url).openConnection() as HttpURLConnection
-                    conn.connectTimeout = 15_000
-                    conn.readTimeout = 30_000
-                    conn.inputStream.use { BitmapFactory.decodeStream(it) }.also { conn.disconnect() }
-                }.getOrNull()
+    fun cached(url: String): Bitmap? = cache.get(url)
+
+    /** Download a listing photo (memory-cached; the server also sends week-long cache headers). */
+    suspend fun load(url: String): Bitmap? = cache.get(url) ?: withContext(Dispatchers.IO) {
+        runCatching {
+            val conn = URL(url).openConnection() as HttpURLConnection
+            conn.connectTimeout = 15_000
+            conn.readTimeout = 30_000
+            try {
+                conn.inputStream.use { BitmapFactory.decodeStream(it) }
+            } finally {
+                conn.disconnect()
             }
-            if (bitmap != null) {
-                cache.put(url, bitmap)
-                if (view.tag == url) view.setImageBitmap(bitmap)
-            }
-        }
+        }.getOrNull()?.also { cache.put(url, it) }
     }
 
     /**

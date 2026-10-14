@@ -13,11 +13,13 @@ from app.api.market_schemas import (
     BuyIn,
     CategoryOut,
     Condition,
+    DeliveryPlaceIn,
     ListingIn,
     ListingOut,
     LocationOut,
     ModerationIn,
     PhotoOut,
+    PlaceOut,
     ProfileIn,
     ReportIn,
     ReportOut,
@@ -72,6 +74,9 @@ def listing_cards(db: Session, listings: list[Listing]) -> list[ListingOut]:
             district=names.get(x.district_id) if x.district_id else None,
             suburb=names.get(x.suburb_id) if x.suburb_id else None,
             location_ids={"province": x.province_id, "district": x.district_id, "suburb": x.suburb_id},
+            meetup=PlaceOut(latitude=x.latitude, longitude=x.longitude, address=x.meetup_address)
+            if x.latitude is not None or x.meetup_address
+            else None,
             status=x.status,
             photos=[
                 PhotoOut(
@@ -214,9 +219,25 @@ def buy(listing_id: uuid.UUID, body: BuyIn, user: Me, db: DB, key: IdemKey = Non
         user.id,
         key,
         {"op": "buy", "listing": listing_id, **body.model_dump()},
-        lambda: OrderOut.model_validate(market.buy(db, user, listing_id, body.quantity)),
+        lambda: OrderOut.model_validate(
+            market.buy(
+                db,
+                user,
+                listing_id,
+                body.quantity,
+                market.DeliveryPlace(**body.delivery.model_dump()) if body.delivery else None,
+            )
+        ),
     )
     return OrderOut.model_validate(result)
+
+
+@router.post("/orders/{order_id}/delivery-location", tags=["orders"])
+def delivery_location(order_id: uuid.UUID, body: DeliveryPlaceIn, user: Me, db: DB) -> OrderOut:
+    """Buyer or seller moves the handover point (GPS point and/or address) while the order is open."""
+    order = market.set_delivery_place(db, user, order_id, body.latitude, body.longitude, body.address)
+    db.commit()
+    return OrderOut.model_validate(order)
 
 
 @router.post("/listings/{listing_id}/report", status_code=201, tags=["marketplace"])

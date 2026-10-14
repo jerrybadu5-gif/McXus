@@ -1,0 +1,44 @@
+[package]
+name = "mcxus-crypto"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "McXus end-to-end encryption: a thin wrapper over OpenMLS (RFC 9420) for the Android app"
+publish = false
+
+[lib]
+name = "mcxus_crypto"
+crate-type = ["cdylib", "lib"]
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+required-features = ["bindgen"]
+
+[features]
+bindgen = ["uniffi/cli"]  # only for generating the Kotlin bindings on the build machine
+
+[dependencies]
+openmls = "=0.8.2"
+openmls_rust_crypto = "0.5.1"
+openmls_basic_credential = "0.5"
+openmls_traits = "0.5"
+openmls_memory_storage = "0.5"
+uniffi = "0.29"
+thiserror = "2"
+sha2 = "0.10"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = "s"
+strip = true
+panic = "unwind"
+
+# OpenMLS has a debug_assert! that panics on a failed decryption in debug builds; release builds return an error.
+# Keep debug builds (used by the laptop JVM tests) behaving like the release build on phones.
+[profile.dev.package.openmls]
+debug-assertions = false

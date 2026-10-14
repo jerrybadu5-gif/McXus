@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Compose draws everything; this only sets the window colours shown while the app starts. -->
     <style name="Theme.McXus" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:colorPrimary">#0F5C4C</item>
-        <item name="android:colorAccent">#E8A33D</item>
-        <item name="android:statusBarColor">#0F5C4C</item>
-        <item name="android:windowBackground">#F6F4EF</item>
+        <item name="android:colorPrimary">#0B2545</item>
+        <item name="android:colorAccent">#E9A23B</item>
+        <item name="android:windowBackground">#F4F6F9</item>
     </style>
 </resources>

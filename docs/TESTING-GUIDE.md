@@ -114,3 +114,41 @@ Install: see `android/README.md` (start the laptop with `.\start-dev.ps1 -Lan`, 
 
 Please tell me: phone model and Android version, anything slow, confusing words, and screenshots of problems
 (from screens that allow them).
+
+## 7. M3 encrypted chat + new app, from VS Code with USB (40 minutes)
+
+**Setup (once):** VS Code → Terminal → Run Task… → **Android: one-time setup (Java 17 + Android SDK)**, restart
+VS Code. Phone: Developer options → USB debugging ON → plug in → tap **Allow**.
+
+| # | Do | You should see |
+|---|---|---|
+| C1 | Task **McXus: start backend (Docker)** | API docs open in the browser |
+| C2 | Task **Android: check phone (USB)** | "Connected: <model>, Android <n>" and "Backend is running" |
+| C3 | Task **Android: smoke test on phone (USB)** (Enter = `usb`) | `PhoneSmokeTest` 3 tests passed (app opens, encryption on the phone, encrypted chat via the server) |
+| C4 | **Ctrl+Shift+B** (install & open) | McXus opens on the phone; server `http://127.0.0.1:8000` |
+| C5 | Sign in as seller `70000002`, Market → **Sell** → add a listing with a photo | your listing page |
+| C6 | Me → Sign out; sign in as buyer `70000001`; Wallet → **Top up** 500 | K500.00 |
+| C7 | Market → open the listing → **Chat** | chat opens, listing card is the first message, "encrypted" under the name |
+| C8 | Type "Moning! Still available?" → send | blue bubble with time and ✓ |
+| C9 | Back → listing → **Buy with Stars** → Pay | order screen with QR + PIN; the chat shows a gold **K… in escrow** card |
+| C10 | Sign in as the seller on a 2nd phone (or sign out/in) → **Chats** | the chat with unread badge; both messages readable |
+| C11 | Seller: tap the escrow card → **Accept order**, then type the buyer's PIN → **Confirm handover** | "Completed — Stars paid to the seller" |
+| C12 | In the chat: ⋮ → **Verify encryption** on both phones | the same 60-digit safety number |
+| C13 | Task **Android: live log from phone** while chatting | no red errors (`McXusChat` lines only) |
+| C14 | Turn off the laptop's backend, send a message | a clear "Can't reach the McXus server" message; the list shows "Connecting…" |
+
+Note: with one phone, signing out and in switches accounts on the same phone (each account keeps its own keys).
+Tell me: phone model, anything slow or confusing, and how the design feels compared to WhatsApp/Telegram.
+
+### 7b. Meet-up and delivery location (ADR 0009)
+
+| # | Do | You should see |
+|---|---|---|
+| L1 | Seller: **Sell** → tick Meet-up → **Use my location** (allow location) | "GPS point set" with coordinates; a landmark may be filled in |
+| L2 | **Set on map** → drag the map so the pin is on a public spot → **Use this point**; type a landmark | coordinates change; landmark kept |
+| L3 | Post, open the listing | "Meet-up / pickup point" card; **Directions** opens your maps app at that spot |
+| L4 | Buyer: **Buy with Stars** → choose **Courier** (or Seller delivers) and tap Pay without a place | "Set where to deliver…" — cannot pay yet |
+| L5 | Set the delivery place (your location or map + landmark) → Pay | order screen shows "Courier delivers to …" with Directions |
+| L6 | Seller: open the order → **Change place** → new landmark → Save | buyer sees the new place after refresh |
+| L7 | In the chat: **+ → Share a location** → Send | a "Meet / deliver here" card with Directions on both phones |
+| L8 | Location turned off on the phone, tap **Use my location** | a clear message to turn Location on; **Set on map** still works |

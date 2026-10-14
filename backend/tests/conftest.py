@@ -34,7 +34,8 @@ from app.wallet.service import sandbox_topup  # noqa: E402
 BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RESET_SQL = """
 SET mcxus.allow_truncate = on;
-TRUNCATE postings, journal_entries, order_events, disputes, deposits, withdrawals, idempotency_keys, reviews,
+TRUNCATE mls_messages, key_packages, conversation_members, conversations, devices,
+         postings, journal_entries, order_events, disputes, deposits, withdrawals, idempotency_keys, reviews,
          listing_reports, listing_photos,
          otp_codes, orders, listings RESTART IDENTITY;
 DELETE FROM ledger_accounts WHERE owner_id IS NOT NULL;

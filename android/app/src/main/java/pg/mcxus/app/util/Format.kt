@@ -1,14 +1,20 @@
 package pg.mcxus.app.util
 
 import java.time.Duration
+import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.ZoneId
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 
 /** Display helpers. Pure Kotlin so they are unit-tested on the JVM. */
 object Format {
-    private val PNG = ZoneId.of("Pacific/Port_Moresby")
+    val PNG: ZoneId = ZoneId.of("Pacific/Port_Moresby")
     private val DATE_TIME = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")
+    private val TIME = DateTimeFormatter.ofPattern("HH:mm")
+    private val WEEKDAY = DateTimeFormatter.ofPattern("EEE", java.util.Locale.ENGLISH)
+    private val SHORT_DATE = DateTimeFormatter.ofPattern("dd/MM/yy")
 
     /** "120.00" -> "K120.00". Amounts arrive as exact strings from the server; never parsed to float. */
     fun kina(amount: String): String = if (amount.startsWith("-")) "-K${amount.drop(1)}" else "K$amount"
@@ -72,6 +78,22 @@ object Format {
         "courier" -> "Courier"
         else -> d
     }
+
+    /** Chat list time: "10:42" today, "Yesterday", weekday this week, else "14/10/26". */
+    fun chatTime(epochMillis: Long, now: ZonedDateTime = ZonedDateTime.now(PNG)): String {
+        if (epochMillis <= 0) return ""
+        val t = Instant.ofEpochMilli(epochMillis).atZone(PNG)
+        val days = ChronoUnit.DAYS.between(t.toLocalDate(), now.toLocalDate())
+        return when {
+            days <= 0L -> t.format(TIME)
+            days == 1L -> "Yesterday"
+            days < 7L -> t.format(WEEKDAY)
+            else -> t.format(SHORT_DATE)
+        }
+    }
+
+    /** Bubble time "10:42". */
+    fun clock(epochMillis: Long): String = Instant.ofEpochMilli(epochMillis).atZone(PNG).format(TIME)
 
     /** Text for the handover QR code: the seller's app (M3) will scan it; for now the seller types the PIN. */
     fun handoverQr(orderId: String, pin: String): String = "mcxus:handover:$orderId:$pin"

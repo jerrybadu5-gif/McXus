@@ -17,3 +17,7 @@ android/build/
 android/app/build/
 android/local.properties
 *.apk
+
+# Rust (encryption library)
+crypto/target/
+.idea/
