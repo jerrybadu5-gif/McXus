@@ -44,7 +44,8 @@ def _hash_code(phone: str, code: str) -> str:
     return hmac.new(key, f"{phone}:{code}".encode(), hashlib.sha256).hexdigest()
 
 
-def request_code(db: Session, raw_phone: str) -> None:
+def request_code(db: Session, raw_phone: str) -> str:
+    """Create and send a sign-in code. Returns the code so sandbox mode can show it (never in production)."""
     settings = get_settings()
     phone = normalise_phone(raw_phone)
     now = clock.now()
@@ -65,6 +66,7 @@ def request_code(db: Session, raw_phone: str) -> None:
         )
     )
     send_sms(phone, f"Your McXus code is {code}. It expires in {settings.otp_ttl_minutes} minutes.")
+    return code
 
 
 def send_sms(phone: str, text: str) -> None:

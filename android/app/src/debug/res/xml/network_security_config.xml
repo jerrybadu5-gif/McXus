@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- DEBUG builds only: allow plain HTTP so the test phone can reach the laptop on the home Wi-Fi
+     (e.g. http://192.168.1.20:8000). Release builds use main/res/xml and refuse plain HTTP. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

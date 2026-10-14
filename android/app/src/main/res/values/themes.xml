@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.McXus" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:colorPrimary">#0F5C4C</item>
+        <item name="android:colorAccent">#E8A33D</item>
+        <item name="android:statusBarColor">#0F5C4C</item>
+        <item name="android:windowBackground">#F6F4EF</item>
+    </style>
+</resources>

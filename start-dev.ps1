@@ -1,6 +1,9 @@
 # Starts McXus core (sandbox) with Docker Desktop and seeds demo users.
 # Right-click > "Run with PowerShell", or in PowerShell:  .\start-dev.ps1
+# For the Android app on a phone on the same Wi-Fi:      .\start-dev.ps1 -Lan
+param([switch]$Lan)
 $ErrorActionPreference = "Stop"
+if ($Lan) { $env:MCXUS_API_BIND = "0.0.0.0" } else { $env:MCXUS_API_BIND = "127.0.0.1" }
 Set-Location $PSScriptRoot
 
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
@@ -35,4 +38,11 @@ Write-Host "  Token:      docker compose exec api python -m app.cli dev-token 70
 Write-Host "  SMS codes:  docker compose logs -f api"
 Write-Host "  Smoke test: python scripts\smoke_test.py"
 Write-Host "  Stop:       docker compose down        (add -v to also wipe the database)"
+if ($Lan) {
+    $ips = Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notmatch '^(127|169\.254)\.' -and $_.PrefixOrigin -ne 'WellKnown' }
+    Write-Host ""
+    Write-Host "Phone testing (same Wi-Fi): in the McXus app, set the server to one of:" -ForegroundColor Yellow
+    foreach ($ip in $ips) { Write-Host "  http://$($ip.IPAddress):8000" -ForegroundColor Yellow }
+    Write-Host "  If Windows asks, allow Docker on PRIVATE networks only. Stop with: docker compose down" -ForegroundColor Yellow
+}
 Start-Process "http://localhost:8000/docs"

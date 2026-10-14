@@ -3,7 +3,7 @@
 Privacy-first super app for Papua New Guinea and the Pacific: private messaging, a marketplace, and Stars
 payments protected by escrow.
 
-> **Status: M1 money core (passed) + M2 marketplace (in review) — sandbox.** Test Stars only; no real money moves until a licensed issuer
+> **Status: M1 money core (passed) + M2 marketplace and Android preview (in review) — sandbox.** Test Stars only; no real money moves until a licensed issuer
 > partner is connected (see [ADR 0001](docs/decisions/0001-stars-as-e-money-sandbox-first.md)).
 
 ## What is in this module
@@ -35,6 +35,10 @@ docker compose exec api python -m app.cli dev-token 70000001
 
 Demo users: buyer `70000001`, seller `70000002`, finance A `70000003`, finance B `70000004`,
 mediator `70000005`, admin `70000006`. Step-by-step review: [docs/TESTING-GUIDE.md](docs/TESTING-GUIDE.md).
+
+## Android app (preview)
+
+See [android/README.md](android/README.md): run `.\start-dev.ps1 -Lan`, install `mcxus-preview.apk` on a phone on the same Wi-Fi.
 
 ## Configuration
 
