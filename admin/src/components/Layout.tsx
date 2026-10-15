@@ -1,4 +1,4 @@
-import { Banknote, FileBarChart, Flag, Gavel, Home, LogOut, ScrollText, Users } from "lucide-react";
+import { Banknote, FileBarChart, Flag, Gavel, Home, Lock, LogOut, ScrollText, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { api } from "@/lib/api";
@@ -16,6 +16,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     disputes: (counts.disputes.mediation ?? 0) + (counts.disputes.appeal ?? 0),
     money: counts.deposits_pending + counts.withdrawals_requested,
     moderation: counts.reports_open,
+    freezes: counts.freeze_appeals,
   } : null;
 
   const items = [
@@ -24,6 +25,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { to: "/money", label: "Deposits & payouts", icon: Banknote, show: can(me, "money"), count: waiting?.money },
     { to: "/moderation", label: "Reported listings", icon: Flag, show: can(me, "moderation"), count: waiting?.moderation },
     { to: "/people", label: "People", icon: Users, show: can(me, "people") },
+    { to: "/freezes", label: "Frozen accounts", icon: Lock, show: can(me, "freezes"), count: waiting?.freezes },
     { to: "/reports", label: "Money reports", icon: FileBarChart, show: can(me, "reports") },
     { to: "/audit", label: "Staff activity", icon: ScrollText, show: can(me, "audit") },
   ];
@@ -33,10 +35,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <nav aria-label="Main" className="flex shrink-0 flex-col bg-navy text-navy-muted md:sticky md:top-0 md:h-screen md:w-60">
         <div className="flex items-center gap-2.5 px-5 py-5">
           <img src="/icon.svg" alt="" className="h-8 w-8" />
-          <div className="leading-tight">
+          <div className="flex-1 leading-tight">
             <p className="font-bold text-white">McXus staff</p>
             <p className="text-2xs">Sandbox · Stars are not real money</p>
           </div>
+          {/* On narrow windows the account box below is hidden, so sign-out lives here. */}
+          <button onClick={signOut} className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs hover:bg-navy-soft hover:text-white md:hidden" title={me.display_name || me.phone || ""}>
+            <LogOut size={14} />Sign out
+          </button>
         </div>
         <ul className="flex gap-1 overflow-x-auto px-3 pb-3 md:flex-col md:overflow-visible">
           {items.filter((i) => i.show).map((i) => (

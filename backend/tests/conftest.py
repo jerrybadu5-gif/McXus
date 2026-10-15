@@ -35,7 +35,7 @@ from app.wallet.service import sandbox_topup  # noqa: E402
 BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RESET_SQL = """
 SET mcxus.allow_truncate = on;
-TRUNCATE staff_actions, dispute_events, dispute_evidence, dispute_offers,
+TRUNCATE account_freezes, staff_actions, dispute_events, dispute_evidence, dispute_offers,
          media_blobs, mls_messages, key_packages, conversation_members, conversations, devices,
          postings, journal_entries, order_events, disputes, deposits, withdrawals, idempotency_keys, reviews,
          listing_reports, listing_photos,

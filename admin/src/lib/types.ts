@@ -29,7 +29,14 @@ export interface Dispute extends DisputeSummary {
 
 export interface Overview {
   role: Role; disputes: Partial<Record<Stage, number>>; disputes_overdue: number; deposits_pending: number;
-  withdrawals_requested: number; reports_open: number; users: number; staff: number;
+  withdrawals_requested: number; reports_open: number; freezes_open: number; freeze_appeals: number; users: number; staff: number;
+}
+
+export interface FreezeCase {
+  id: string; user_id: string; user: { id: string; name: string; phone: string | null; status: string };
+  status: "frozen" | "appealed" | "unfrozen" | "upheld"; reason: string; frozen_at: string; frozen_by: string | null;
+  frozen_by_id: string | null; appeal_text: string; appealed_at: string | null; decision_note: string;
+  decided_at: string | null; decided_by: string | null;
 }
 
 export interface Deposit {

@@ -7,6 +7,7 @@ import org.json.JSONObject
  *  {"t":"text","body":"…"}
  *  {"t":"listing","id":"…","title":"…","price":"120.00","thumb":"/media/…"}
  *  {"t":"order","id":"…","title":"…","amount":"120.00"}
+ *  {"t":"dispute","order":"…","title":"…","body":"The buyer opened a dispute: …"}   (tap opens the dispute)
  *  {"t":"location","latitude":"-6.72900","longitude":"146.99700","address":"Eriku market gate"}
  *  {"t":"image","blob":"…","key":"<base64>","sha":"…","w":1280,"h":960,"thumb":"<base64 tiny jpeg>","body":"caption"}
  *  {"t":"voice","blob":"…","key":"<base64>","sha":"…","ms":8200}
@@ -21,6 +22,10 @@ object Payload {
 
     fun order(id: String, title: String, amount: String): String =
         JSONObject().put("t", "order").put("id", id).put("title", title).put("amount", amount).toString()
+
+    /** News about a dispute on an order, sent by the party who acted, so the other sees it in the chat. */
+    fun dispute(orderId: String, title: String, body: String): String =
+        JSONObject().put("t", "dispute").put("order", orderId).put("title", title).put("body", body).toString()
 
     /** A meeting / delivery point shared in the chat (end-to-end encrypted: the server never sees it). */
     fun location(place: pg.mcxus.app.util.Place): String = place.toJson().put("t", "location").toString()
@@ -51,6 +56,7 @@ object Payload {
         return when (p.optString("t")) {
             "listing" -> "🛍 " + p.optString("title")
             "order" -> "★ Order · K" + p.optString("amount")
+            "dispute" -> "⚖ " + p.optString("body").ifBlank { "Dispute update" }
             "location" -> "📍 " + p.optString("address").ifBlank { "Location" }
             "image" -> "📷 " + p.optString("body").ifBlank { "Photo" }
             "voice" -> "🎤 Voice message " + formatDuration(p.optLong("ms"))

@@ -1,6 +1,7 @@
 package pg.mcxus.app.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -30,11 +31,12 @@ import pg.mcxus.app.ui.Field
 import pg.mcxus.app.ui.Header
 import pg.mcxus.app.ui.Ic
 import pg.mcxus.app.ui.Note
+import pg.mcxus.app.ui.PeopleSearch
 import pg.mcxus.app.ui.SellerBadge
 import pg.mcxus.app.ui.str
 import pg.mcxus.app.ui.theme.Mx
 
-/** Find someone by mobile number and start an encrypted chat. */
+/** Find someone by name or mobile number (suggestions as you type) and start an encrypted chat. */
 @Composable
 fun NewChatScreen(nav: NavHostController) {
     val app = LocalApp.current
@@ -44,16 +46,11 @@ fun NewChatScreen(nav: NavHostController) {
     Column(Modifier.fillMaxSize().background(Mx.Bg)) {
         Header("New chat", onBack = { nav.back() })
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Field(phone, { phone = it; found = null }, "Their mobile number", keyboard = KeyboardType.Phone, tag = "lookup-phone")
             val person = found
             if (person == null) {
-                BigButton("Find", busy = busy, enabled = phone.isNotBlank(), onClick = {
-                    busy = true
-                    app.launch(onDone = { busy = false }) {
-                        found = app.api.post("/v1/users/lookup", JSONObject().put("phone", phone))
-                    }
-                })
+                PeopleSearch(phone, { phone = it }, onPick = { found = it }, tag = "lookup-phone")
             } else {
+                Text("Change", color = Mx.Blue, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { found = null })
                 Card {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Avatar(person.str("name"), 48.dp, key = person.str("id"))

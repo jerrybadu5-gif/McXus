@@ -312,6 +312,29 @@ class StaffAction(TimestampMixin, Base):
     detail: Mapped[str] = mapped_column(Text, default="")
 
 
+class AccountFreeze(TimestampMixin, Base):
+    """One freeze of an account, from freezing to unfreezing: why, by whom, the person's appeal and the decision.
+    Unfreezing (or refusing an appeal) must be done by a different staff member from the one who froze it."""
+
+    __tablename__ = "account_freezes"
+    __table_args__ = (
+        CheckConstraint("status IN ('frozen', 'appealed', 'unfrozen', 'upheld')", name="status_valid"),
+        Index("ix_account_freezes_user", "user_id", "status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    status: Mapped[str] = mapped_column(String(10), default="frozen")
+    reason: Mapped[str] = mapped_column(Text)
+    frozen_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))  # None: frozen before M4.1
+    frozen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    appeal_text: Mapped[str] = mapped_column(Text, default="")
+    appealed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    decided_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    decision_note: Mapped[str] = mapped_column(Text, default="")
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class Deposit(TimestampMixin, Base):
     """Money received into the trust bank account. Recorded by one finance user, approved by another."""
 

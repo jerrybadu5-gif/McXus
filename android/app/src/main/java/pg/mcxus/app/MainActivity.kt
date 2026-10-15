@@ -45,6 +45,7 @@ import androidx.navigation.compose.rememberNavController
 import pg.mcxus.app.ui.screens.ChatScreen
 import pg.mcxus.app.ui.screens.DisputeScreen
 import pg.mcxus.app.ui.screens.DisputesListScreen
+import pg.mcxus.app.ui.screens.FrozenScreen
 import pg.mcxus.app.ui.screens.HomeScreen
 import pg.mcxus.app.ui.screens.ListingScreen
 import pg.mcxus.app.ui.screens.GroupInfoScreen
@@ -70,7 +71,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         app = (application as McXusApp).app
         if (app.signedIn) app.startChat()
-        pendingChat.value = intent?.getStringExtra(EXTRA_CHAT)
+        pendingChat.value = target(intent)
         setContent {
             McXusTheme {
                 CompositionLocalProvider(LocalApp provides app) { Root(pendingChat) }
@@ -80,7 +81,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        pendingChat.value = intent.getStringExtra(EXTRA_CHAT)
+        pendingChat.value = target(intent)
     }
 
     override fun onStart() {
@@ -104,6 +105,11 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_CHAT = "chat"
+        const val EXTRA_DISPUTE = "dispute"
+
+        /** Where a tapped notification leads: a chat id, or "dispute:<order id>". */
+        fun target(intent: Intent?): String? =
+            intent?.getStringExtra(EXTRA_DISPUTE)?.let { "dispute:$it" } ?: intent?.getStringExtra(EXTRA_CHAT)
     }
 }
 
@@ -131,9 +137,16 @@ private fun Root(pendingChat: MutableState<String?>) {
         if (!app.signedIn) nav.navigate(Routes.SIGN_IN) { popUpTo(0) }
     }
     LaunchedEffect(pendingChat.value, app.signedIn) {
-        val chat = pendingChat.value ?: return@LaunchedEffect
-        if (app.signedIn) nav.navigate(Routes.chat(chat))
+        val target = pendingChat.value ?: return@LaunchedEffect
+        if (app.signedIn) nav.navigate(if (target.startsWith("dispute:")) Routes.dispute(target.removePrefix("dispute:")) else Routes.chat(target))
         pendingChat.value = null
+    }
+    if (app.signedIn && app.frozen) {
+        Box(Modifier.fillMaxSize()) {
+            FrozenScreen()
+            MessageHost(app, Modifier.align(Alignment.BottomCenter))
+        }
+        return
     }
     Box(Modifier.fillMaxSize()) {
         NavHost(nav, startDestination = if (app.signedIn) Routes.HOME else Routes.SIGN_IN, modifier = Modifier.imePadding()) {

@@ -11,15 +11,15 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app import audit
+from app import freezes, people
 from app.api.schemas import OrderOut, UserOut
 from app.auth.deps import require_role
 from app.db import get_db
 from app.disputes import service as disputes
-from app.errors import AppError, NotFound
+from app.errors import NotFound
 from app.ledger.service import user_account
 from app.marketplace import trust
-from app.models import Deposit, Dispute, ListingReport, Order, StaffAction, User, Withdrawal
+from app.models import AccountFreeze, Deposit, Dispute, ListingReport, Order, StaffAction, User, Withdrawal
 
 router = APIRouter(prefix="/v1/admin", tags=["staff"])
 DB = Annotated[Session, Depends(get_db)]
@@ -67,6 +67,8 @@ class OverviewOut(BaseModel):
     deposits_pending: int
     withdrawals_requested: int
     reports_open: int
+    freezes_open: int
+    freeze_appeals: int
     users: int
     staff: int
 
@@ -88,6 +90,10 @@ def overview(staff: AnyStaff, db: DB) -> OverviewOut:
             select(func.count()).select_from(Withdrawal).where(Withdrawal.status == "requested")
         ),
         reports_open=count(select(func.count()).select_from(ListingReport).where(ListingReport.status == "open")),
+        freezes_open=count(
+            select(func.count()).select_from(AccountFreeze).where(AccountFreeze.status.in_(freezes.OPEN))
+        ),
+        freeze_appeals=count(select(func.count()).select_from(AccountFreeze).where(AccountFreeze.status == "appealed")),
         users=count(select(func.count()).select_from(User)),
         staff=count(select(func.count()).select_from(User).where(User.role.in_(STAFF_ROLES))),
     )
@@ -97,18 +103,11 @@ def overview(staff: AnyStaff, db: DB) -> OverviewOut:
 def search_users(
     staff: AnyStaff, db: DB, q: str = "", role: str | None = None, limit: Page = 50, offset: Offset = 0
 ) -> list[UserOut]:
-    """Find people by phone, name or id. Use role=staff for all staff accounts."""
+    """Find people by name (any case, words in any order), phone digits or id. role=staff lists staff."""
     stmt = select(User)
-    q = q.strip()
-    if q:
-        try:
-            stmt = stmt.where(User.id == uuid.UUID(q))
-        except ValueError:
-            digits = "".join(ch for ch in q if ch.isdigit())
-            conditions = [User.display_name.ilike(f"%{q}%")]
-            if len(digits) >= 3:
-                conditions.append(User.phone.like(f"%{digits}%"))
-            stmt = stmt.where(or_(*conditions))
+    condition = people.match(q)
+    if condition is not None:
+        stmt = stmt.where(condition)
     if role == "staff":
         stmt = stmt.where(User.role.in_(STAFF_ROLES))
     elif role:
@@ -160,15 +159,56 @@ def user_profile(user_id: uuid.UUID, staff: AnyStaff, db: DB) -> UserProfileOut:
 @router.post("/users/{user_id}/status")
 def set_status(user_id: uuid.UUID, body: StatusIn, staff: Oversight, db: DB) -> UserOut:
     """Freeze an account (it cannot sign in or move Stars) or unfreeze it. Compliance or admin; logged."""
-    user = db.get(User, user_id)
+    user = db.get(User, user_id, with_for_update=True)
     if user is None:
         raise NotFound("User not found")
-    if user.id == staff.id:
-        raise AppError("You cannot change your own account status", code="own_account")
-    user.status = body.status
-    audit.record(db, staff, f"user_{body.status}", "user", user.id, body.reason)
+    if body.status == "frozen":
+        freezes.freeze(db, staff, user, body.reason)
+    else:
+        freezes.unfreeze(db, staff, user, body.reason)
     db.commit()
     return UserOut.model_validate(user)
+
+
+class FreezeCaseOut(BaseModel):
+    id: uuid.UUID
+    user_id: uuid.UUID
+    user: dict[str, object]
+    status: Literal["frozen", "appealed", "unfrozen", "upheld"]
+    reason: str
+    frozen_at: datetime
+    frozen_by: str | None
+    frozen_by_id: uuid.UUID | None
+    appeal_text: str
+    appealed_at: datetime | None
+    decision_note: str
+    decided_at: datetime | None
+    decided_by: str | None
+
+
+class FreezeDecisionIn(BaseModel):
+    unfreeze: bool = Field(description="true unfreezes the account; false keeps it frozen (refuses the appeal)")
+    note: str = Field(min_length=5, max_length=2000, description="Reason, shown to the person")
+
+
+@router.get("/freezes")
+def freeze_cases(
+    staff: Oversight,
+    db: DB,
+    status: Literal["open", "appealed", "closed", "all"] = "open",
+    limit: Page = 100,
+    offset: Offset = 0,
+) -> list[FreezeCaseOut]:
+    """Frozen accounts to review (appeals first), or decided ones."""
+    return [FreezeCaseOut.model_validate(c) for c in freezes.cases(db, status, limit, offset)]
+
+
+@router.post("/freezes/{case_id}/decide")
+def decide_freeze(case_id: uuid.UUID, body: FreezeDecisionIn, staff: Oversight, db: DB) -> FreezeCaseOut:
+    """Unfreeze, or keep frozen after an appeal. Must be someone other than the staff member who froze it."""
+    case = freezes.decide(db, staff, case_id, body.unfreeze, body.note)
+    db.commit()
+    return FreezeCaseOut.model_validate(freezes.case_item(db, case))
 
 
 @router.get("/orders")

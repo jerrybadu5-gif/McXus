@@ -7,6 +7,7 @@ import { when } from "@/lib/utils";
 
 const ACTIONS: Record<string, string> = {
   kyc_tier: "changed verification", role: "changed a staff role", user_frozen: "froze an account", user_active: "unfroze an account",
+  freeze_upheld: "kept an account frozen after its appeal",
   deposit_recorded: "recorded a deposit", deposit_approved: "approved a deposit", deposit_rejected: "rejected a deposit",
   withdrawal_paid: "paid a withdrawal", withdrawal_failed: "marked a withdrawal failed", dispute_taken: "took a dispute",
   dispute_decided: "decided a dispute", appeal_decided: "decided an appeal", listing_remove: "removed a listing", listing_restore: "restored a listing",

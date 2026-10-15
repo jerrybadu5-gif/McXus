@@ -124,6 +124,11 @@ fun OrderScreen(nav: NavHostController, orderId: String) {
             if (action == "pay") app.session.pins[orderId] = r.str("handover_pin")
             if (action == "dispute") {
                 app.say("Dispute opened. The Stars stay held until it is settled.")
+                val o = loader.data
+                if (o != null) {
+                    val other = if (o.str("seller_id") == app.session.userId) o.str("buyer_id") else o.str("seller_id")
+                    app.tellInChat(other, orderId, o.str("title"), "I opened a dispute: ${body?.optString("reason").orEmpty()}")
+                }
                 nav.navigate(Routes.dispute(orderId))
             } else {
                 app.say("Done")

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, Route, Routes, useParams, useSearchParams } from "react-router-dom";
 import { PageHead } from "@/components/Layout";
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +9,7 @@ import { Empty, ErrorLine, Loading } from "@/components/ui/states";
 import { api, qs } from "@/lib/api";
 import { ROLE_NAMES, useSession } from "@/lib/session";
 import type { Order, Profile, Role, User } from "@/lib/types";
-import { useLoad } from "@/lib/use";
+import { useDebounced, useLoad } from "@/lib/use";
 import { cn, kina, when } from "@/lib/utils";
 
 const TIERS = ["T0 Chat only", "T1 Basic (buy)", "T2 Verified (buy, sell, withdraw)", "T3 Registered seller"];
@@ -29,6 +29,14 @@ function Search() {
   const q = params.get("q") ?? "";
   const staffOnly = params.get("role") === "staff";
   const [text, setText] = useState(q);
+  const typed = useDebounced(text.trim(), 250);
+  // Search as you type (any case, words in any order); the address keeps the search for back/forward.
+  useEffect(() => {
+    if (typed === q) return;
+    if (typed) params.set("q", typed); else params.delete("q");
+    setParams(params, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [typed]);
   const list = useLoad(() => api.get<User[]>(`/v1/admin/users${qs({ q, role: staffOnly ? "staff" : undefined })}`), [q, staffOnly]);
 
   return (
@@ -36,9 +44,9 @@ function Search() {
       <PageHead title="People" />
       <div className="grid lg:grid-cols-[360px_1fr]">
         <section className="border-r border-line bg-white">
-          <form className="flex gap-2 border-b border-line p-4" onSubmit={(e) => { e.preventDefault(); params.set("q", text); setParams(params); }}>
-            <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="Phone, name or id" aria-label="Search people" />
-            <Button variant="outline">Find</Button>
+          <form className="border-b border-line p-4" onSubmit={(e) => e.preventDefault()} role="search">
+            <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="Type a name, phone or id" aria-label="Search people" autoFocus />
+            <p className="mt-1 text-2xs text-muted">Suggestions appear as you type. Not case-sensitive.</p>
           </form>
           <label className="flex items-center gap-2 px-4 py-2 text-xs">
             <input type="checkbox" checked={staffOnly} onChange={(e) => { if (e.target.checked) params.set("role", "staff"); else params.delete("role"); setParams(params); }} />

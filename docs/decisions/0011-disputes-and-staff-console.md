@@ -56,6 +56,21 @@ order DISPUTED: the Stars stay in escrow; no auto-release
   reports), kyc (people, verification level), moderator (reported listings), admin (everything, staff roles).
 - Every staff action that changes something is written to `staff_actions` (who, what, which record, detail).
 
+## M4.1 (Jerry's review, 15/10/2026)
+
+- Dispute news reaches the other party three ways: a dispute card in their buyer–seller chat (sent end-to-end
+  encrypted by the person who acted, so the usual chat notification fires), a red badge on Me and Me › Disputes
+  (`GET /v1/disputes/attention`: a new dispute, an offer from the other side, or a decision to accept or appeal),
+  and a phone notification once per new update (content-free push wakes the app; it asks the server).
+- Several photos can be picked at once (disputes 5, chat 10, listings 5).
+- Discover › Message and a listing's Chat attach the listing above the message box; it is sent with the message.
+- People search (console and app) is not case-sensitive, matches words in any order and suggests as you type.
+  Customers search names from 2 letters, or a (nearly) complete phone number; results show only the name and the
+  last 3 digits of the phone.
+- Freezing is a case with a reason (`account_freezes`): the frozen person can still sign in to read why and appeal
+  once; someone other than the staff member who froze it decides (unfreeze, or keep frozen with a reason).
+  The console lists frozen accounts, appeals first. Migration 0008 opens a case for accounts frozen earlier.
+
 ## Known limits
 
 - No SMS/push to the parties when the stage changes yet: the app checks the dispute every 20 seconds while open,

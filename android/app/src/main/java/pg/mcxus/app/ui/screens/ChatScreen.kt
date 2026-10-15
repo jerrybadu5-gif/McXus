@@ -135,17 +135,26 @@ fun ChatScreen(nav: NavHostController, conversationId: String) {
         }
     }
 
-    fun sendPhoto(uri: android.net.Uri) {
+    /** Send photos in the order picked, one at a time; the typed caption goes with the first. */
+    fun sendPhotos(uris: List<android.net.Uri>) {
+        if (uris.isEmpty()) return
         sending = true
         app.launch(onDone = { sending = false }) {
-            val jpeg = withContext(Dispatchers.Default) { Images.prepareUpload(context.contentResolver, uri, maxPx = 1280, quality = 70) }
-            val (w, h) = Images.size(jpeg)
-            val thumb = withContext(Dispatchers.Default) { Images.thumbnail(jpeg) }
-            if (!engine.sendImage(conversationId, jpeg, w, h, thumb, draft.trim())) app.say("This chat is not ready yet — try again in a moment.", error = true)
-            else draft = ""
+            for (uri in uris) {
+                val jpeg = withContext(Dispatchers.Default) { Images.prepareUpload(context.contentResolver, uri, maxPx = 1280, quality = 70) }
+                val (w, h) = Images.size(jpeg)
+                val thumb = withContext(Dispatchers.Default) { Images.thumbnail(jpeg) }
+                if (!engine.sendImage(conversationId, jpeg, w, h, thumb, draft.trim())) {
+                    app.say("This chat is not ready yet — try again in a moment.", error = true)
+                    break
+                }
+                draft = ""
+            }
         }
     }
-    val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { it?.let(::sendPhoto) }
+    fun sendPhoto(uri: android.net.Uri) = sendPhotos(listOf(uri))
+    // Pick up to 10 photos at once; each goes as its own encrypted photo (the typed caption goes with the first).
+    val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(10)) { uris -> sendPhotos(uris) }
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok -> if (ok) cameraUri?.let(::sendPhoto) }
     fun openCamera() {
         val file = java.io.File(context.cacheDir, "chat-camera.jpg")
@@ -263,6 +272,26 @@ fun ChatScreen(nav: NavHostController, conversationId: String) {
             items(messages, key = { it.localId }) { m -> MessageItem(m, nav, version, if (isGroup) names else null, engine.userId) }
         }
 
+        // Card waiting to go with the next message (from Discover › Message or a listing's Chat button)
+        val pending = app.pendingCard[conversationId]
+        if (pending != null && !removed && !elsewhere) {
+            val card = Payload.parse(pending)
+            Row(
+                Modifier.fillMaxWidth().background(Color.White).padding(start = 12.dp, end = 4.dp, top = 8.dp).testTag("pending-card"),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.width(4.dp).height(44.dp).clip(RoundedCornerShape(2.dp)).background(Mx.Gold))
+                pg.mcxus.app.ui.RemoteImage(card.optString("thumb"), Modifier.padding(start = 8.dp).size(44.dp).clip(RoundedCornerShape(8.dp)))
+                Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+                    Text("About this listing", fontSize = 11.sp, color = Mx.Muted)
+                    Text(card.optString("title"), fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    Text(pg.mcxus.app.util.Format.kina(card.optString("price")), fontSize = 12.sp, color = Mx.Blue, fontWeight = FontWeight.SemiBold)
+                }
+                IconButton(onClick = { app.pendingCard.remove(conversationId) }) { Icon(Ic.Close, "Don't attach", tint = Mx.Muted) }
+            }
+        }
+
         // Composer
         if (removed || elsewhere) {
             Text(
@@ -352,7 +381,7 @@ fun ChatScreen(nav: NavHostController, conversationId: String) {
                     Text(" Pay", color = Mx.GoldInk, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
             }
-            if (draft.isBlank()) {
+            if (draft.isBlank() && pending == null) {
                 IconButton(
                     onClick = {
                         if (readiness != Readiness.Ready) app.say("This chat is not ready yet — try again in a moment.", error = true)
@@ -364,7 +393,19 @@ fun ChatScreen(nav: NavHostController, conversationId: String) {
                 ) { Icon(Ic.Mic, "Record a voice message", tint = Color.White, modifier = Modifier.size(22.dp)) }
             } else {
                 IconButton(
-                    onClick = { val text = draft.trim(); if (text.isNotEmpty()) send(Payload.text(text)) { draft = "" } },
+                    onClick = {
+                        val text = draft.trim()
+                        val card = app.pendingCard[conversationId]
+                        if (card != null) {
+                            // The card first, then the message, so it reads like a reply to the listing.
+                            send(card) {
+                                app.pendingCard.remove(conversationId)
+                                if (text.isNotEmpty()) send(Payload.text(text)) { draft = "" }
+                            }
+                        } else if (text.isNotEmpty()) {
+                            send(Payload.text(text)) { draft = "" }
+                        }
+                    },
                     enabled = !sending && readiness == Readiness.Ready,
                     modifier = Modifier.size(48.dp).clip(CircleShape).background(Mx.Blue).testTag("send"),
                 ) { Icon(Ic.Send, "Send", tint = Color.White, modifier = Modifier.size(22.dp)) }
@@ -446,6 +487,22 @@ private fun MessageItem(m: LocalMessage, nav: NavHostController, version: Long, 
             }
         }
         "order" -> Side(m.mine) { OrderCard(p, nav, version) }
+        "dispute" -> Side(m.mine) {
+            Column(
+                Modifier.width(260.dp).clip(RoundedCornerShape(16.dp)).background(Color.White).border(1.dp, Mx.Gold, RoundedCornerShape(16.dp))
+                    .clickable { nav.navigate(pg.mcxus.app.Routes.dispute(p.optString("order"))) }.testTag("dispute-card"),
+            ) {
+                Row(Modifier.fillMaxWidth().background(Mx.GoldSoft).padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Ic.Shield, null, tint = Mx.GoldInk, modifier = Modifier.size(18.dp))
+                    Text("  Dispute · " + p.optString("title"), color = Mx.GoldInk, fontWeight = FontWeight.Bold, fontSize = 13.sp,
+                        maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                }
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(p.optString("body"), fontSize = 14.sp, color = Mx.Ink)
+                    Text(if (m.mine) "Open the dispute" else "Open the dispute to answer", color = Mx.Blue, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
+            }
+        }
         "location" -> Side(m.mine) {
             val place = Place.from(p) ?: Place(address = "Location")
             val context = androidx.compose.ui.platform.LocalContext.current

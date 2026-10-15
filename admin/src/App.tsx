@@ -7,6 +7,7 @@ import { can, SessionContext } from "@/lib/session";
 import type { User } from "@/lib/types";
 import { AuditPage } from "@/pages/Audit";
 import { DisputesPage } from "@/pages/Disputes";
+import { FreezesPage } from "@/pages/Freezes";
 import { HomePage } from "@/pages/Home";
 import { MoneyPage } from "@/pages/Money";
 import { ModerationPage } from "@/pages/Moderation";
@@ -48,6 +49,7 @@ export default function App() {
           {can(me, "moderation") && <Route path="/moderation" element={<ModerationPage />} />}
           {can(me, "people") && <Route path="/people/*" element={<PeoplePage />} />}
           {can(me, "audit") && <Route path="/audit" element={<AuditPage />} />}
+          {can(me, "freezes") && <Route path="/freezes" element={<FreezesPage />} />}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>

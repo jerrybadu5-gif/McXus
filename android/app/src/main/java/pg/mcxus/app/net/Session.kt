@@ -30,6 +30,11 @@ class Session(context: Context, name: String = "mcxus") {
         get() = prefs.getBoolean("show_previews_v2", false)
         set(value) = prefs.edit().putBoolean("show_previews_v2", value).apply()
 
+    /** Dispute updates already notified ("orderId:eventId"), so each one is announced once. */
+    var notifiedDisputes: Set<String>
+        get() = prefs.getStringSet("notified_disputes", emptySet()) ?: emptySet()
+        set(value) = prefs.edit().putStringSet("notified_disputes", value.toList().takeLast(200).toSet()).apply()
+
     var role: String = "user"
     var tier: Int = 0
 

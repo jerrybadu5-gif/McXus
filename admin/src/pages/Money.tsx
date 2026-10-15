@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
 import { PageHead } from "@/components/Layout";
 import { useNames } from "@/components/Names";
@@ -9,7 +9,7 @@ import { Empty, ErrorLine, Loading } from "@/components/ui/states";
 import { api, qs } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import type { Deposit, User, Withdrawal } from "@/lib/types";
-import { useLoad } from "@/lib/use";
+import { useDebounced, useLoad } from "@/lib/use";
 import { cn, isMoney, kina, when } from "@/lib/utils";
 
 export function MoneyPage() {
@@ -86,9 +86,13 @@ function RecordDeposit({ open, onClose, onDone }: { open: boolean; onClose: () =
   const [ref, setRef] = useState("");
   const [error, setError] = useState<unknown>();
 
-  async function search() {
-    try { setFound(await api.get<User[]>(`/v1/admin/users${qs({ q, limit: 8 })}`)); } catch (e) { setError(e); }
-  }
+  const typed = useDebounced(q.trim(), 250);
+  useEffect(() => {
+    if (typed.length < 2) { setFound([]); return; }
+    let live = true;
+    api.get<User[]>(`/v1/admin/users${qs({ q: typed, limit: 8 })}`).then((r) => { if (live) setFound(r); }, setError);
+    return () => { live = false; };
+  }, [typed]);
   async function save(e: React.FormEvent) {
     e.preventDefault();
     if (!who) return;
@@ -104,10 +108,8 @@ function RecordDeposit({ open, onClose, onDone }: { open: boolean; onClose: () =
       <form className="space-y-4" onSubmit={save}>
         {!who ? (
           <Field label="Customer (phone or name)">
-            <div className="flex gap-2">
-              <Input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); search(); } }} />
-              <Button type="button" variant="outline" onClick={search}>Find</Button>
-            </div>
+            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Start typing a name or number" autoFocus
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (found.length === 1) setWho(found[0]); } }} />
             <ul className="mt-2 divide-y divide-line rounded-lg border border-line empty:hidden">
               {found.map((u) => <li key={u.id}><button type="button" className="w-full px-3 py-2 text-left hover:bg-tint" onClick={() => setWho(u)}>{u.display_name || "No name"} <span className="text-muted">{u.phone}</span></button></li>)}
             </ul>

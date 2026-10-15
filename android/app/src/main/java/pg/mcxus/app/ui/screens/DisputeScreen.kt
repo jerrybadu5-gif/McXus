@@ -92,23 +92,35 @@ fun DisputeScreen(nav: NavHostController, orderId: String) {
         }
     }
 
-    fun post(path: String, body: JSONObject? = null, done: String) {
+    /** Do a dispute action; [chat] (if given) also goes into the buyer–seller chat for the other person. */
+    fun post(path: String, body: JSONObject? = null, done: String, chat: String? = null) {
         busy = true
         app.launch(onDone = { busy = false }) {
-            loader.data = app.api.post("/v1/disputes/$orderId/$path", body)
+            val d = app.api.post("/v1/disputes/$orderId/$path", body)
+            loader.data = d
             app.say(done)
+            if (chat != null) {
+                val otherId = d.optJSONObject(if (d.str("you") == "buyer") "seller" else "buyer")?.str("id").orEmpty()
+                if (otherId.isNotEmpty()) app.tellInChat(otherId, orderId, d.str("title"), chat)
+            }
+            app.checkDisputes()
         }
     }
 
-    fun sendPhoto(uri: android.net.Uri) {
+    /** Add one or several photos (up to 5 each in a dispute; the server says when the limit is reached). */
+    fun sendPhotos(uris: List<android.net.Uri>) {
+        if (uris.isEmpty()) return
         busy = true
         app.launch(onDone = { busy = false }) {
-            val jpeg = withContext(Dispatchers.Default) { Images.prepareUpload(context.contentResolver, uri, maxPx = 1600, quality = 80) }
-            loader.data = JSONObject(app.api.upload("/v1/disputes/$orderId/photos", jpeg).toString())
-            app.say("Photo added. The other person and the mediator can see it.")
+            uris.forEach { uri ->
+                val jpeg = withContext(Dispatchers.Default) { Images.prepareUpload(context.contentResolver, uri, maxPx = 1600, quality = 80) }
+                loader.data = JSONObject(app.api.upload("/v1/disputes/$orderId/photos", jpeg).toString())
+            }
+            app.say("${if (uris.size == 1) "Photo" else "${uris.size} photos"} added. The other person and the mediator can see them.")
         }
     }
-    val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { it?.let(::sendPhoto) }
+    fun sendPhoto(uri: android.net.Uri) = sendPhotos(listOf(uri))
+    val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(5)) { sendPhotos(it) }
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok -> if (ok) cameraUri?.let(::sendPhoto) }
 
     Column(Modifier.fillMaxSize().background(Mx.Bg)) {
@@ -163,7 +175,7 @@ fun DisputeScreen(nav: NavHostController, orderId: String) {
                     }
                     if ("accept_decision" in actions) {
                         Spacer(Modifier.height(8.dp))
-                        BigButton("Accept the decision", busy = busy, onClick = { post("accept-decision", null, "You accepted. It is final when the $other accepts or the 3 days end.") })
+                        BigButton("Accept the decision", busy = busy, onClick = { post("accept-decision", null, "You accepted. It is final when the $other accepts or the 3 days end.", chat = "I accepted the mediator's decision.") })
                     }
                     if ("appeal" in actions) {
                         Spacer(Modifier.height(6.dp))
@@ -192,9 +204,9 @@ fun DisputeScreen(nav: NavHostController, orderId: String) {
                                 LineButton("Withdraw my offer", { post("offers/${o.str("id")}", JSONObject().put("accept", false), "Offer withdrawn") }, Modifier.fillMaxWidth())
                             } else {
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    LineButton("Reject", { post("offers/${o.str("id")}", JSONObject().put("accept", false), "Offer rejected") }, Modifier.weight(1f), color = Mx.Red)
+                                    LineButton("Reject", { post("offers/${o.str("id")}", JSONObject().put("accept", false), "Offer rejected", chat = "I rejected your offer (buyer gets back ${Format.kina(o.str("buyer_refund"))}).") }, Modifier.weight(1f), color = Mx.Red)
                                     BigButton("Accept", busy = busy, modifier = Modifier.weight(1f).testTag("accept-offer"),
-                                        onClick = { post("offers/${o.str("id")}", JSONObject().put("accept", true), "Agreed. The Stars have moved.") })
+                                        onClick = { post("offers/${o.str("id")}", JSONObject().put("accept", true), "Agreed. The Stars have moved.", chat = "I accepted your offer: buyer gets back ${Format.kina(o.str("buyer_refund"))}. The dispute is closed.") })
                                 }
                             }
                         }
@@ -203,7 +215,7 @@ fun DisputeScreen(nav: NavHostController, orderId: String) {
                 if ("offer" in actions) LineButton("Make an offer", { dialog = "offer" }, Modifier.fillMaxWidth().testTag("make-offer"))
             }
             if ("escalate" in actions) {
-                LineButton("Ask a mediator now", { post("escalate", null, "A mediator will decide within 5 working days.") }, Modifier.fillMaxWidth())
+                LineButton("Ask a mediator now", { post("escalate", null, "A mediator will decide within 5 working days.", chat = "I asked a McXus mediator to decide.") }, Modifier.fillMaxWidth())
             }
 
             // Evidence
@@ -238,7 +250,8 @@ fun DisputeScreen(nav: NavHostController, orderId: String) {
     when (dialog) {
         "offer" -> if (d != null) OfferDialog(d.str("amount"), d.str("you"), onDismiss = { dialog = null }) { refund, note ->
             dialog = null
-            post("offers", JSONObject().put("buyer_refund", refund).put("note", note), "Offer sent")
+            post("offers", JSONObject().put("buyer_refund", refund).put("note", note), "Offer sent",
+                chat = "Offer: buyer gets back ${Format.kina(refund)}" + if (note.isNotBlank()) " — $note" else "")
         }
         "statement" -> TextDialog("Add a statement", "What happened, in your words", "Add", onDismiss = { dialog = null }) { text ->
             dialog = null
@@ -248,12 +261,12 @@ fun DisputeScreen(nav: NavHostController, orderId: String) {
             note = "You can appeal once. A senior staff member who did not make this decision will decide, and that is final.",
             onDismiss = { dialog = null }) { text ->
             dialog = null
-            post("appeal", JSONObject().put("reason", text), "Appeal sent")
+            post("appeal", JSONObject().put("reason", text), "Appeal sent", chat = "I appealed the mediator's decision.")
         }
         "photo" -> AlertDialog(
             onDismissRequest = { dialog = null },
             title = { Text("Add a photo") },
-            text = { Text("Show the item, packaging or receipt. Up to 5 photos each.") },
+            text = { Text("Show the item, packaging or receipt. Up to 5 photos each; you can pick several at once.") },
             confirmButton = {
                 TextButton(onClick = {
                     dialog = null
@@ -263,7 +276,7 @@ fun DisputeScreen(nav: NavHostController, orderId: String) {
                 }) { Text("Take a photo") }
             },
             dismissButton = {
-                TextButton(onClick = { dialog = null; gallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) { Text("Choose from gallery") }
+                TextButton(onClick = { dialog = null; gallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) { Text("Choose from gallery (several)") }
             },
         )
     }

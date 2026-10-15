@@ -572,7 +572,60 @@ def mine(db: Session, user: User) -> list[dict[str, Any]]:
         ids |= {o.buyer_id, o.seller_id}
     names = _names(db, ids)
     now = clock.now()
-    return [summary(d, o, names, now) for d, o in rows]
+    out = []
+    for d, o in rows:
+        item = summary(d, o, names, now)
+        item["attention"], item["last_event"] = attention(db, d, o, user)
+        out.append(item)
+    return out
+
+
+def attention(db: Session, dispute: Dispute, order: Order, user: User) -> tuple[str | None, int]:
+    """What this party needs to do now (None if nothing), and the id of the dispute's newest event (the app
+    notifies once per new event that needs an answer)."""
+    last = db.scalar(select(func.max(DisputeEvent.id)).where(DisputeEvent.dispute_id == dispute.id)) or 0
+    party = _party(order, user)
+    if party is None or dispute.status == "resolved":
+        return None, last
+    other = order.seller_id if party == "buyer" else order.buyer_id
+    if dispute.status in ("negotiation", "mediation"):
+        offer = db.scalars(
+            select(DisputeOffer).where(
+                DisputeOffer.dispute_id == dispute.id, DisputeOffer.by_user_id == other, DisputeOffer.status == "open"
+            )
+        ).first()
+        if offer is not None:
+            return (
+                f"The {'seller' if party == 'buyer' else 'buyer'} offered: buyer gets back K{offer.buyer_refund}",
+                last,
+            )
+    if dispute.status == "negotiation" and dispute.opened_by == other:
+        acted = db.scalar(
+            select(func.count())
+            .select_from(DisputeEvent)
+            .where(DisputeEvent.dispute_id == dispute.id, DisputeEvent.actor_id == user.id)
+        )
+        if not acted:
+            return f"The {'seller' if party == 'buyer' else 'buyer'} opened a dispute: answer it", last
+    if dispute.status == "decided":
+        accepted = dispute.buyer_accepted if party == "buyer" else dispute.seller_accepted
+        if not accepted:
+            return "The mediator decided: accept or appeal", last
+    return None, last
+
+
+def attention_summary(db: Session, user: User) -> dict[str, Any]:
+    items = [
+        {"order_id": d["order_id"], "title": d["title"], "attention": d["attention"], "last_event": d["last_event"]}
+        for d in mine(db, user)
+        if d["attention"]
+    ]
+    return {"count": len(items), "items": items}
+
+
+def parties(db: Session, order_id: uuid.UUID) -> tuple[uuid.UUID, uuid.UUID]:
+    order = escrow.get_order(db, order_id)
+    return order.buyer_id, order.seller_id
 
 
 def queue(

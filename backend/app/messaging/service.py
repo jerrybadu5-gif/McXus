@@ -611,6 +611,15 @@ def set_push_token(db: Session, user: User, device_id: uuid.UUID, token: str | N
     own_device(db, user, device_id).push_token = token or None
 
 
+def user_push_tokens(db: Session, user_ids: list[uuid.UUID]) -> list[str]:
+    """Push tokens of all of these people's phones (dispute updates and other non-chat wake-ups)."""
+    if not user_ids:
+        return []
+    return list(
+        db.scalars(select(Device.push_token).where(Device.user_id.in_(user_ids), Device.push_token.is_not(None)))
+    )
+
+
 def push_targets(db: Session, message: MlsMessage) -> list[str]:
     """Push tokens of the phones that should wake up for this message (never the sender's phone)."""
     recipients = (

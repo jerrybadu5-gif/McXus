@@ -100,7 +100,7 @@ fun MeTab(nav: NavHostController) {
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Color.White)) {
             Row_(Ic.Edit, "Edit profile & my listings") { nav.navigate(Routes.PROFILE) }
             Row_(Ic.Receipt, "My orders") { nav.navigate(Routes.ORDERS) }
-            Row_(Ic.Shield, "Disputes", tag = "my-disputes") { nav.navigate(Routes.DISPUTES) }
+            Row_(Ic.Shield, "Disputes", tag = "my-disputes", badge = app.disputeAttention) { nav.navigate(Routes.DISPUTES) }
             Row_(Ic.Store, "Sell something") { nav.navigate(Routes.SELL) }
             var previews by remember { mutableStateOf(app.session.showPreviews) }
             Row_(Ic.Bell, "Notifications", if (previews) "Show text" else "Hide text", tag = "notif-previews") {
@@ -145,7 +145,7 @@ private fun Stat(value: String, label: String, modifier: Modifier) {
 
 @Suppress("FunctionName")
 @Composable
-private fun Row_(icon: ImageVector, label: String, value: String = "", tag: String = label, onClick: () -> Unit) {
+private fun Row_(icon: ImageVector, label: String, value: String = "", tag: String = label, badge: Int = 0, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().height(52.dp).clickable(onClick = onClick).padding(horizontal = 14.dp).testTag(tag),
         verticalAlignment = Alignment.CenterVertically,
@@ -155,6 +155,10 @@ private fun Row_(icon: ImageVector, label: String, value: String = "", tag: Stri
             Icon(icon, null, tint = Mx.Blue, modifier = Modifier.size(18.dp))
         }
         Text(label, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        if (badge > 0) {
+            Text("$badge waiting for you", Modifier.clip(RoundedCornerShape(10.dp)).background(Mx.Red).padding(horizontal = 8.dp, vertical = 2.dp)
+                .testTag("$tag-badge"), color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        }
         Text(value, fontSize = 13.sp, color = Mx.Muted)
         Icon(Ic.Right, null, tint = Mx.Grey, modifier = Modifier.size(16.dp))
     }

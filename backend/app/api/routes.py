@@ -1,13 +1,15 @@
 """HTTP API v1. Business rules live in the services; routes check roles, call a service and commit."""
 
 import uuid
-from typing import Annotated
+from datetime import datetime
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Header, Query
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import audit
+from app import audit, freezes
 from app.api.schemas import (
     DepositDecisionIn,
     DepositIn,
@@ -33,7 +35,7 @@ from app.api.schemas import (
     WithdrawalSettleIn,
 )
 from app.auth import service as auth
-from app.auth.deps import current_user, require_role
+from app.auth.deps import current_user, require_role, signed_in_user
 from app.config import get_settings
 from app.db import get_db
 from app.errors import NotFound
@@ -73,9 +75,44 @@ def otp_verify(body: OtpVerify, db: DB) -> TokenOut:
     return TokenOut(access_token=auth.issue_token(user), user_id=user.id)
 
 
+AnyStatus = Annotated[User, Depends(signed_in_user)]
+
+
 @router.get("/me", tags=["auth"])
-def me(user: Me) -> UserOut:
+def me(user: AnyStatus) -> UserOut:
+    """Who is signed in; works for a frozen account too (status "frozen"), so the app can explain it."""
     return UserOut.model_validate(user)
+
+
+class FreezeOut(BaseModel):
+    id: uuid.UUID
+    status: Literal["frozen", "appealed", "unfrozen", "upheld"]
+    reason: str
+    frozen_at: datetime
+    appeal_text: str
+    appealed_at: datetime | None
+    decision_note: str
+    decided_at: datetime | None
+    can_appeal: bool
+
+
+class AppealIn(BaseModel):
+    text: str = Field(min_length=10, max_length=2000)
+
+
+@router.get("/me/freeze", tags=["auth"])
+def my_freeze(user: AnyStatus, db: DB) -> FreezeOut | None:
+    """Why my account is (or was last) frozen, my appeal and the decision."""
+    case = freezes.view(freezes.latest_case(db, user.id))
+    return FreezeOut.model_validate(case) if case else None
+
+
+@router.post("/me/freeze/appeal", tags=["auth"])
+def appeal_freeze(body: AppealIn, user: AnyStatus, db: DB) -> FreezeOut:
+    """A frozen person explains why the account should be unfrozen (once). Staff decide in the console."""
+    case = freezes.appeal(db, user, body.text)
+    db.commit()
+    return FreezeOut.model_validate(freezes.view(case))
 
 
 # ---------- wallet ----------

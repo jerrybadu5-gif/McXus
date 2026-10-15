@@ -7,8 +7,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import androidx.navigation.compose.rememberNavController
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.MainScope
@@ -161,7 +163,7 @@ class ScreenshotTour {
             }
         }
         val dir = File(out!!).apply { mkdirs() }
-        listOf("signin", "chats", "chat", "discover", "market", "listing", "sell", "wallet", "order", "me", "place", "map", "group-chat", "group-info", "new-group", "sell-error", "error-toast", "dispute", "order-disputed", "dispute-decided").forEachIndexed { i, name ->
+        listOf("signin", "chats", "chat", "discover", "market", "listing", "sell", "wallet", "order", "me", "place", "map", "group-chat", "group-info", "new-group", "sell-error", "error-toast", "dispute", "me-badge", "chat-dispute-card", "pending-card", "new-chat-search", "order-disputed", "dispute-decided", "frozen").forEachIndexed { i, name ->
             if (name == "dispute") app.snackbar.currentSnackbarData?.dismiss()
             if (name == "dispute") runBlocking {
                 // The seller accepts, the buyer disputes with a photo, the seller offers K40 back.
@@ -176,6 +178,18 @@ class ScreenshotTour {
                 app.api.upload("/v1/disputes/$orderId/photos", jpeg)
                 sellerApi.post("/v1/disputes/$orderId/offers", JSONObject().put("buyer_refund", "40.00").put("note", "Sorry! K40 back for the panel?"))
             }
+            if (name == "me-badge") runBlocking { app.checkDisputes() }
+            if (name == "chat-dispute-card") runBlocking {
+                seller.send(conv, Payload.dispute(orderId, "Solar lamp with phone charger", "Offer: buyer gets back K40.00 — Sorry! K40 back for the panel?"))
+                withTimeout(30_000) { while (app.chat!!.messages(conv).none { it.payload.contains("\"dispute\"") }) delay(100) }
+            }
+            if (name == "pending-card") app.pendingCard[conv] = Payload.listing(listingId, "Solar lamp with phone charger", "120.00", "")
+            if (name == "frozen") runBlocking {
+                val admin = Session(context, "tour-admin").apply { this.server = this@ScreenshotTour.server!!; token = adminToken }
+                Api(admin).post("/v1/admin/users/${app.session.userId}/status",
+                    JSONObject().put("status", "frozen").put("reason", "Testing the frozen screen: several reports of fake payment slips"))
+                app.refreshStatus()
+            }
             if (name == "dispute-decided") runBlocking {
                 app.api.post("/v1/disputes/$orderId/escalate")
                 val admin = Session(context, "tour-admin").apply { this.server = this@ScreenshotTour.server!!; token = adminToken }
@@ -186,6 +200,8 @@ class ScreenshotTour {
                 "sell-error" -> "sell"
                 "error-toast" -> "market"
                 "dispute-decided" -> "dispute"
+                "me-badge" -> "me"
+                "chat-dispute-card", "pending-card" -> "chat"
                 "order-disputed" -> "order"
                 else -> name
             }
@@ -195,6 +211,14 @@ class ScreenshotTour {
                 compose.onNodeWithTag("post-listing", useUnmergedTree = true).performClick()
             }
             if (name == "error-toast") app.say(pg.mcxus.app.OUTDATED, error = true)
+            if (name == "new-chat-search") {
+                Thread.sleep(500)
+                compose.onNodeWithTag("lookup-phone").performTextInput("kila SOLAR")
+                compose.mainClock.advanceTimeBy(400) // the typing pause before searching
+                compose.waitUntil(15_000) {
+                    compose.onAllNodesWithTag("lookup-phone-results").fetchSemanticsNodes().isNotEmpty()
+                }
+            }
             Thread.sleep(2500) // let network loads finish
             compose.waitForIdle()
             val view = compose.activity.window.decorView
@@ -222,6 +246,8 @@ class ScreenshotTour {
             "sell" -> SellScreen(nav)
             "order" -> OrderScreen(nav, orderId)
             "dispute" -> pg.mcxus.app.ui.screens.DisputeScreen(nav, orderId)
+            "new-chat-search" -> pg.mcxus.app.ui.screens.NewChatScreen(nav)
+            "frozen" -> pg.mcxus.app.ui.screens.FrozenScreen()
             "place" -> androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.padding(16.dp)) {
                 pg.mcxus.app.ui.PlaceField("Meet-up / pickup point", pg.mcxus.app.util.Place.of(-6.729, 146.997, "Eriku market gate"), {})
             }

@@ -5,7 +5,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Query, Response, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Response, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -144,6 +144,14 @@ class DecideIn(BaseModel):
     note: str = Field(min_length=5, max_length=2000, description="Reason, shown to both parties")
 
 
+def _tell(bg: BackgroundTasks, db: Session, order_id: uuid.UUID, actor: User) -> None:
+    """Wake the other party's phones (both parties' after a staff action) so their app shows the update."""
+    from app.api.chat_routes import wake_users
+
+    buyer, seller = disputes.parties(db, order_id)
+    wake_users(bg, db, [u for u in (buyer, seller) if u != actor.id])
+
+
 def _view(db: Session, user: User, order_id: uuid.UUID) -> DisputeOut:
     return DisputeOut.model_validate(disputes.view(db, user, order_id))
 
@@ -152,16 +160,40 @@ def _view(db: Session, user: User, order_id: uuid.UUID) -> DisputeOut:
 
 
 @router.post("/orders/{order_id}/dispute", tags=["disputes"])
-def open_dispute(order_id: uuid.UUID, body: OpenIn, user: Me, db: DB) -> DisputeOut:
+def open_dispute(order_id: uuid.UUID, body: OpenIn, user: Me, db: DB, bg: BackgroundTasks) -> DisputeOut:
     """Open a dispute: the order is frozen and 3 days of negotiation start."""
     disputes.open_dispute(db, user, order_id, body.reason)
     db.commit()
+    _tell(bg, db, order_id, user)
     return _view(db, user, order_id)
 
 
+class MyDisputeOut(DisputeSummaryOut):
+    attention: str | None = Field(description="What you need to do now, if anything")
+    last_event: int
+
+
+class AttentionItem(BaseModel):
+    order_id: uuid.UUID
+    title: str
+    attention: str
+    last_event: int
+
+
+class AttentionOut(BaseModel):
+    count: int = Field(description="Disputes waiting for you (badge on Me › Disputes)")
+    items: list[AttentionItem]
+
+
 @router.get("/disputes", tags=["disputes"])
-def my_disputes(user: Me, db: DB) -> list[DisputeSummaryOut]:
-    return [DisputeSummaryOut.model_validate(d) for d in disputes.mine(db, user)]
+def my_disputes(user: Me, db: DB) -> list[MyDisputeOut]:
+    return [MyDisputeOut.model_validate(d) for d in disputes.mine(db, user)]
+
+
+@router.get("/disputes/attention", tags=["disputes"])
+def attention(user: Me, db: DB) -> AttentionOut:
+    """Disputes that need your answer: a new dispute, an offer, or a decision to accept or appeal."""
+    return AttentionOut.model_validate(disputes.attention_summary(db, user))
 
 
 @router.get("/disputes/{order_id}", tags=["disputes"])
@@ -170,42 +202,51 @@ def get_dispute(order_id: uuid.UUID, user: Me, db: DB) -> DisputeOut:
 
 
 @router.post("/disputes/{order_id}/offers", status_code=201, tags=["disputes"])
-def make_offer(order_id: uuid.UUID, body: OfferIn, user: Me, db: DB) -> DisputeOut:
+def make_offer(order_id: uuid.UUID, body: OfferIn, user: Me, db: DB, bg: BackgroundTasks) -> DisputeOut:
     disputes.make_offer(db, user, order_id, body.buyer_refund, body.note)
     db.commit()
+    _tell(bg, db, order_id, user)
     return _view(db, user, order_id)
 
 
 @router.post("/disputes/{order_id}/offers/{offer_id}", tags=["disputes"])
-def answer_offer(order_id: uuid.UUID, offer_id: uuid.UUID, body: AnswerIn, user: Me, db: DB) -> DisputeOut:
+def answer_offer(
+    order_id: uuid.UUID, offer_id: uuid.UUID, body: AnswerIn, user: Me, db: DB, bg: BackgroundTasks
+) -> DisputeOut:
     disputes.answer_offer(db, user, order_id, offer_id, body.accept)
     db.commit()
+    _tell(bg, db, order_id, user)
     return _view(db, user, order_id)
 
 
 @router.post("/disputes/{order_id}/escalate", tags=["disputes"])
-def escalate(order_id: uuid.UUID, user: Me, db: DB) -> DisputeOut:
+def escalate(order_id: uuid.UUID, user: Me, db: DB, bg: BackgroundTasks) -> DisputeOut:
     """Ask for a mediator now instead of waiting for the 3 days to end."""
     disputes.escalate(db, user, order_id)
     db.commit()
+    _tell(bg, db, order_id, user)
     return _view(db, user, order_id)
 
 
 @router.post("/disputes/{order_id}/statements", status_code=201, tags=["disputes"])
-def add_statement(order_id: uuid.UUID, body: StatementIn, user: Me, db: DB) -> DisputeOut:
+def add_statement(order_id: uuid.UUID, body: StatementIn, user: Me, db: DB, bg: BackgroundTasks) -> DisputeOut:
     disputes.add_statement(db, user, order_id, body.text)
     db.commit()
+    _tell(bg, db, order_id, user)
     return _view(db, user, order_id)
 
 
 @router.post("/disputes/{order_id}/photos", status_code=201, tags=["disputes"])
-async def add_photo(order_id: uuid.UUID, file: UploadFile, user: Me, db: DB, caption: str = "") -> DisputeOut:
+async def add_photo(
+    order_id: uuid.UUID, file: UploadFile, user: Me, db: DB, bg: BackgroundTasks, caption: str = ""
+) -> DisputeOut:
     limit = get_settings().max_upload_mb * 1024 * 1024
     data = await file.read(limit + 1)
     if len(data) > limit:
         raise AppError(f"Photos must be under {get_settings().max_upload_mb} MB", code="photo_too_large")
     disputes.add_photo(db, user, order_id, data, caption)
     db.commit()
+    _tell(bg, db, order_id, user)
     return _view(db, user, order_id)
 
 
@@ -216,18 +257,20 @@ def evidence_photo(evidence_id: uuid.UUID, user: Me, db: DB) -> Response:
 
 
 @router.post("/disputes/{order_id}/accept-decision", tags=["disputes"])
-def accept_decision(order_id: uuid.UUID, user: Me, db: DB) -> DisputeOut:
+def accept_decision(order_id: uuid.UUID, user: Me, db: DB, bg: BackgroundTasks) -> DisputeOut:
     """Accept the mediator's decision. When both accept, it is final at once."""
     disputes.accept_decision(db, user, order_id)
     db.commit()
+    _tell(bg, db, order_id, user)
     return _view(db, user, order_id)
 
 
 @router.post("/disputes/{order_id}/appeal", tags=["disputes"])
-def appeal(order_id: uuid.UUID, body: AppealIn, user: Me, db: DB) -> DisputeOut:
+def appeal(order_id: uuid.UUID, body: AppealIn, user: Me, db: DB, bg: BackgroundTasks) -> DisputeOut:
     """Appeal the mediator's decision (once, within 3 days). A senior staff member decides; that is final."""
     disputes.appeal(db, user, order_id, body.reason)
     db.commit()
+    _tell(bg, db, order_id, user)
     return _view(db, user, order_id)
 
 
@@ -258,26 +301,29 @@ def staff_view(order_id: uuid.UUID, staff: Staff, db: DB) -> DisputeOut:
 
 
 @router.post("/admin/disputes/{order_id}/take", tags=["staff"])
-def take_case(order_id: uuid.UUID, staff: Mediator, db: DB) -> DisputeOut:
+def take_case(order_id: uuid.UUID, staff: Mediator, db: DB, bg: BackgroundTasks) -> DisputeOut:
     disputes.take_case(db, staff, order_id)
     audit.record(db, staff, "dispute_taken", "order", order_id)
     db.commit()
+    _tell(bg, db, order_id, staff)
     return _view(db, staff, order_id)
 
 
 @router.post("/admin/disputes/{order_id}/decide", tags=["staff"])
-def decide(order_id: uuid.UUID, body: DecideIn, staff: Mediator, db: DB) -> DisputeOut:
+def decide(order_id: uuid.UUID, body: DecideIn, staff: Mediator, db: DB, bg: BackgroundTasks) -> DisputeOut:
     """Mediator's decision. Money moves when the 3-day appeal window ends or both parties accept."""
     disputes.decide(db, staff, order_id, body.buyer_refund, body.note)
     audit.record(db, staff, "dispute_decided", "order", order_id, f"Buyer gets back K{body.buyer_refund}. {body.note}")
     db.commit()
+    _tell(bg, db, order_id, staff)
     return _view(db, staff, order_id)
 
 
 @router.post("/admin/disputes/{order_id}/final", tags=["staff"])
-def final_decision(order_id: uuid.UUID, body: DecideIn, staff: Senior, db: DB) -> DisputeOut:
+def final_decision(order_id: uuid.UUID, body: DecideIn, staff: Senior, db: DB, bg: BackgroundTasks) -> DisputeOut:
     """Senior (compliance/admin) decision on an appeal. Final; money moves now."""
     disputes.final_decision(db, staff, order_id, body.buyer_refund, body.note)
     audit.record(db, staff, "appeal_decided", "order", order_id, f"Buyer gets back K{body.buyer_refund}. {body.note}")
     db.commit()
+    _tell(bg, db, order_id, staff)
     return _view(db, staff, order_id)

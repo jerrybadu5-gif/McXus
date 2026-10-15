@@ -19,6 +19,8 @@ export function HomePage() {
     can(me, "money") && { to: "/money", n: data.deposits_pending, label: "deposits to approve (another finance officer recorded them)" },
     can(me, "money") && { to: "/money/payouts", n: data.withdrawals_requested, label: "withdrawals to pay" },
     can(me, "moderation") && { to: "/moderation", n: data.reports_open, label: "reported listings to review" },
+    can(me, "freezes") && { to: "/freezes", n: data.freeze_appeals, label: "appeals from frozen accounts" },
+    can(me, "freezes") && { to: "/freezes", n: data.freezes_open, label: "accounts frozen now", quiet: true },
   ].filter(Boolean) as { to: string; n: number; label: string; late?: number; quiet?: boolean }[];
 
   return (

@@ -6,9 +6,10 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, Response
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import push
+from app import people, push
 from app.api.market_schemas import SellerCard
 from app.auth.deps import current_user
 from app.config import get_settings
@@ -141,6 +142,32 @@ def claim_key(body: ClaimIn, user: Me, db: DB) -> ClaimOut:
     return ClaimOut(key_package=encode(package.data), device_id=package.device_id)
 
 
+class PersonOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    phone_hint: str = Field(description="Last 3 digits of the phone, so people with the same name can be told apart")
+    badge: str
+
+
+@router.get("/users/search")
+def search_people(user: Me, db: DB, q: str = "", limit: Annotated[int, Query(ge=1, le=20)] = 8) -> list[PersonOut]:
+    """Suggestions as you type: names (any case, words in any order, from 2 letters) or a phone number (7+ digits)."""
+    q = q.strip()
+    condition = people.match(q, min_phone_digits=7)
+    if condition is None or (len(q) < 2 and not q.isdigit()):
+        return []
+    found = list(
+        db.scalars(
+            select(User)
+            .where(condition, User.status == "active", User.id != user.id)
+            .order_by(User.display_name)
+            .limit(limit)
+        )
+    )
+    cards = market.seller_cards(db, {u.id for u in found})
+    return [PersonOut(**people.card(u), badge=cards.get(u.id, {}).get("badge", "new_seller")) for u in found]
+
+
 @router.post("/users/lookup")
 def lookup(body: LookupIn, user: Me, db: DB) -> SellerCard:
     found = chat.lookup_user(db, body.phone)
@@ -173,6 +200,15 @@ def _wake(background: BackgroundTasks, db: Session, *messages: MlsMessage) -> No
     if push.client() is None:
         return
     tokens = [t for m in messages for t in chat.push_targets(db, m)]
+    if tokens:
+        background.add_task(_push_and_forget_dead, tokens)
+
+
+def wake_users(background: BackgroundTasks, db: Session, user_ids: list[uuid.UUID]) -> None:
+    """Content-free push to these people's phones so the app checks for news (e.g. a dispute update)."""
+    if push.client() is None:
+        return
+    tokens = chat.user_push_tokens(db, user_ids)
     if tokens:
         background.add_task(_push_and_forget_dead, tokens)
 

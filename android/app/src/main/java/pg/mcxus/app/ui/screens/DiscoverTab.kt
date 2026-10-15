@@ -177,7 +177,13 @@ private fun Post(item: JSONObject, nav: NavHostController, openMarket: () -> Uni
                     "Message",
                     Modifier.clip(RoundedCornerShape(18.dp)).background(Mx.Blue).clickable {
                         val engine = app.chat ?: return@clickable app.say("Encryption is still starting, try again in a second.", error = true)
-                        app.launch { nav.navigate(Routes.chat(engine.open(seller.str("id"), item.str("id")))) }
+                        app.launch {
+                            val conv = engine.open(seller.str("id"), item.str("id"))
+                            // The post goes with my first message, like replying to it (shown above the message box).
+                            val thumb = item.optJSONArray("photos")?.objects()?.firstOrNull()?.str("thumb_url").orEmpty()
+                            app.pendingCard[conv] = pg.mcxus.app.chat.Payload.listing(item.str("id"), item.str("title"), item.str("price"), thumb)
+                            nav.navigate(Routes.chat(conv))
+                        }
                     }.padding(horizontal = 14.dp, vertical = 9.dp),
                     color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp,
                 )

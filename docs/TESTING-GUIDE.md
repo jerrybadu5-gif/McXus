@@ -199,6 +199,21 @@ sandbox fills in the code. Mediator 70000005 · compliance 70000009 · finance 7
 | D11 | Console as admin: People → find the demo seller → **Change verification**, **Freeze account** (compliance or admin) | the seller can't use the app while frozen; Staff activity lists both actions with your name |
 | D12 | Console on a phone-size window | the menu moves to the top; lists and cases stack |
 
+### 9b. Your M4 comments (M4.1)
+
+| # | Do | You should see |
+|---|---|---|
+| D13 | Buyer opens a dispute | the seller gets a dispute card in their chat with the buyer (and a chat notification); Me shows a red badge, Me › Disputes "1 waiting for you" |
+| D14 | Seller makes an offer | the buyer gets the dispute card "Offer: buyer gets back K…" in the chat, the badge, and a notification "A dispute needs your answer" (name and text if Me › Notifications › Show text) |
+| D15 | Dispute → Add a photo → Choose from gallery | you can tick several photos (up to 5); same in chat (+ › Photo from gallery, up to 10) and Sell |
+| D16 | Discover → a post → **Message** | the chat opens with the listing shown above the message box; type a message and send: the listing card goes first, then your message. ✕ removes it |
+| D17 | Chats → New chat: type part of a name in any case ("kila solar", "SOLAR KILA") | suggestions appear as you type; tap one to start the chat. Also in New group / Add people |
+| D18 | Console on a narrow window (or phone) | **Sign out** at the top right |
+| D19 | Console People / Record a bank deposit: type "demo b" | suggestions as you type, not case-sensitive |
+| D20 | Console as compliance: People → Second Buyer → **Freeze account** with a reason | the app on that account shows "Your account is frozen", the reason and an **Appeal** box |
+| D21 | In the app: send an appeal | console **Frozen accounts** shows "Appeal waiting" (gold count); as the same compliance officer you can't decide ("You froze this account…") |
+| D22 | Console as admin (a different person): **Unfreeze** with what you checked (or **Keep frozen** with a reason) | the app opens normally after **Check again** (or shows the refusal and reason); Staff activity lists both steps |
+
 ### Please confirm
 
 - Are the three windows right: **3 days** to agree, **5 PNG working days** for the mediator, **3 days** to appeal?

@@ -23,6 +23,7 @@ export const ACCESS: Record<string, Role[]> = {
   moderation: ["moderator"],
   people: ["support", "kyc", "moderator", "mediator", "finance", "compliance"],
   audit: ["compliance"],
+  freezes: ["compliance"],
 };
 
 export function can(me: User, area: keyof typeof ACCESS): boolean {
