@@ -36,6 +36,9 @@ then restart VS Code. Phone: Developer options → **USB debugging ON**, plug in
 | Android: live log from phone | `.\scripts\phone.ps1 log` |
 | Android: unit tests (laptop) | `cd android; .\gradlew.bat testDebugUnitTest lintDebug` |
 
+**Phone and emulator together:** every connected device is used (installed, linked, opened). To pick one, the
+tasks ask *all / phone / emulator*, or in PowerShell add `-Device phone`, `-Device emulator` or `-Device <serial>`.
+
 **Server over the USB cable:** the install/test tasks run `adb reverse tcp:8000 tcp:8000`, so in the app the
 server is simply `http://127.0.0.1:8000` while the cable is plugged in (no Wi-Fi needed). On Wi-Fi instead, use
 the address `start-dev.ps1 -Lan` prints, e.g. `http://192.168.1.20:8000`.
