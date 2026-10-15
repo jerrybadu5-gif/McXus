@@ -16,6 +16,9 @@ if ($LASTEXITCODE -ne 0) {
     Read-Host "Press Enter to close"; exit 1
 }
 
+. "$PSScriptRoot\scripts\console-port.ps1"
+$consolePort = Get-ConsolePort
+
 Write-Host "1/3  Building and starting database, API, worker and staff console (first run takes a few minutes)..." -ForegroundColor Cyan
 docker compose up -d --build
 if ($LASTEXITCODE -ne 0) { Write-Host "Could not start the containers." -ForegroundColor Red; Read-Host "Press Enter"; exit 1 }
@@ -38,7 +41,7 @@ docker compose exec -T api python -m app.cli seed-demo
 
 Write-Host ""
 Write-Host "McXus core is running (SANDBOX - test Stars only)." -ForegroundColor Green
-Write-Host "  Staff console: http://localhost:8080   (mediator 70000005, compliance 70000009, finance 70000003/4, admin 70000006)"
+Write-Host "  Staff console: http://localhost:$consolePort   (mediator 70000005, compliance 70000009, finance 70000003/4, admin 70000006)"
 Write-Host "  Sample disputes: docker compose exec api python -m app.cli seed-disputes"
 Write-Host "  API docs:   http://localhost:8000/docs"
 Write-Host "  Token:      docker compose exec api python -m app.cli dev-token 70000001"

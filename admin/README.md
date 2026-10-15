@@ -6,8 +6,9 @@ enforces the same rules (ADR 0011).
 
 ## Run it
 
-- With Docker (normal): `docker compose up -d` from the repo root, then open http://localhost:8080
-  (VS Code task **McXus: open staff console**). nginx serves the app and forwards `/v1` to the API.
+- With Docker (normal): `start-dev.ps1` or VS Code task **McXus: open staff console** opens it at
+  http://localhost:8080. If Windows has reserved 8080 or another program uses it, the scripts pick the next free
+  port (8090, 8180, …), save it as `MCXUS_ADMIN_PORT` in `.env` and print it. nginx serves the app and forwards `/v1` to the API.
 - For development: `npm install`, then `npm run dev` (http://localhost:5173, forwards `/v1` to
   http://127.0.0.1:8000; set `MCXUS_API` to use another API).
 
@@ -29,4 +30,4 @@ npm run build
 - Money arrives from the API as decimal strings and is never turned into floating-point numbers for
   arithmetic (`src/lib/utils.ts`).
 - The sign-in token is kept in sessionStorage and is gone when the tab closes.
-- Keep port 8080 on 127.0.0.1 (as in docker-compose.yml) or behind a VPN; it is for staff only.
+- Keep the console port on 127.0.0.1 (as in docker-compose.yml) or behind a VPN; it is for staff only.

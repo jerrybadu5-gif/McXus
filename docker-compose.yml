@@ -46,10 +46,10 @@ services:
       api: {condition: service_healthy}
     restart: unless-stopped
 
-  admin:   # staff console (disputes, KYC, deposits & payouts, moderation, people, audit): http://localhost:8080
+  admin:   # staff console (disputes, KYC, deposits & payouts, moderation, people, audit): http://localhost:8080 (or MCXUS_ADMIN_PORT)
     build: ./admin
     ports:
-      - "127.0.0.1:8080:8080"   # staff only: never expose this beyond the office network without a VPN
+      - "127.0.0.1:${MCXUS_ADMIN_PORT:-8080}:8080"   # staff only; start-dev.ps1 picks a free port if 8080 is taken
     depends_on:
       api: {condition: service_healthy}
     restart: unless-stopped

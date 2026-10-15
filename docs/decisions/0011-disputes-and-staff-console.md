@@ -48,7 +48,7 @@ order DISPUTED: the Stars stay in escrow; no auto-release
 ## Staff console
 
 - React + TypeScript + Vite + Tailwind with shadcn/ui-style components (Radix), in `admin/`. Served by nginx in
-  Docker on `127.0.0.1:8080`, which forwards `/v1` to the API (same origin; strict Content-Security-Policy).
+  Docker on `127.0.0.1:8080` (or the free port in `MCXUS_ADMIN_PORT`), which forwards `/v1` to the API (same origin; strict Content-Security-Policy).
 - Staff sign in with their phone and a code, like the app. Customer accounts are turned away. The token is kept
   in sessionStorage (gone when the tab closes).
 - Each role sees only its parts (the API enforces the same): support (disputes read-only, people), mediator

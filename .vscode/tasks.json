@@ -27,7 +27,7 @@
     {
       "label": "McXus: open staff console",
       "type": "shell",
-      "command": "powershell -NoProfile -Command \"docker compose up -d admin; Start-Process http://localhost:8080\"",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ${workspaceFolder}/scripts/open-console.ps1",
       "problemMatcher": []
     },
     {

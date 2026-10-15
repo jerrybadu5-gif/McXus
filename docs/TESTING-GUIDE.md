@@ -179,7 +179,8 @@ Use two phones, or one phone plus the laptop emulator. Push needs the Firebase s
 Rebuild first: task **McXus: start backend** (it now also starts the staff console), then reinstall the app
 (Ctrl+Shift+B). Optional sample cases: task **McXus: sample disputes (sandbox)**.
 
-Staff console: task **McXus: open staff console** or http://localhost:8080. Sign in with a demo staff number; the
+Staff console: task **McXus: open staff console** (it opens the right address; usually http://localhost:8080,
+another port if Windows has reserved 8080). Sign in with a demo staff number; the
 sandbox fills in the code. Mediator 70000005 · compliance 70000009 · finance 70000003 and 70000004 · moderator
 70000007 · KYC 70000010 · support 70000011 · admin 70000006.
 

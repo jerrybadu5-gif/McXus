@@ -42,7 +42,7 @@ Demo users: buyer `70000001`, seller `70000002`, finance A `70000003`, finance B
 mediator `70000005`, admin `70000006`, moderator `70000007`, compliance `70000009`, KYC `70000010`, support `70000011`.
 
 Staff console (disputes, deposits and payouts, reported listings, people, reports, staff activity):
-http://localhost:8080. Sign in with a staff number; the sandbox fills in the code. Sample disputes:
+http://localhost:8080 (`start-dev.ps1` prints another port if 8080 is taken on your PC). Sign in with a staff number; the sandbox fills in the code. Sample disputes:
 `docker compose exec api python -m app.cli seed-disputes`. Details: [admin/README.md](admin/README.md). Step-by-step review: [docs/TESTING-GUIDE.md](docs/TESTING-GUIDE.md).
 
 ## Android app
