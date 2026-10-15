@@ -16,8 +16,8 @@ android {
         applicationId = "pg.mcxus.app"
         minSdk = 26 // Android 8.0
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.5.1-m4"
+        versionCode = 7
+        versionName = "0.6.0-m5"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk {
             // Native encryption library (OpenMLS) is built for these phone CPU types.

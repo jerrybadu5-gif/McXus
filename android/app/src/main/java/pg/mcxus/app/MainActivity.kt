@@ -121,6 +121,12 @@ object Routes {
     fun order(id: String) = "order/$id"
     fun dispute(orderId: String) = "dispute/$orderId"
     const val DISPUTES = "disputes"
+    const val STATUS_NEW = "status/new"
+    fun status(who: String) = "status/view/$who"
+    fun post(id: String) = "post/$id"
+    fun newPost(channelId: String? = null) = if (channelId == null) "newpost" else "newpost?channel=$channelId"
+    const val CHANNELS = "channels"
+    fun channel(id: String) = "channel/$id"
     const val NEW_CHAT = "newchat"
     const val NEW_GROUP = "newgroup"
     fun group(id: String) = "group/$id"
@@ -157,6 +163,14 @@ private fun Root(pendingChat: MutableState<String?>) {
             composable("order/{id}") { OrderScreen(nav, it.arguments?.getString("id")!!) }
             composable("dispute/{id}") { DisputeScreen(nav, it.arguments?.getString("id")!!) }
             composable(Routes.DISPUTES) { DisputesListScreen(nav) }
+            composable(Routes.STATUS_NEW) { pg.mcxus.app.ui.screens.StatusComposeScreen(nav) }
+            composable("status/view/{who}") { pg.mcxus.app.ui.screens.StatusViewerScreen(nav, it.arguments?.getString("who")!!) }
+            composable("post/{id}") { pg.mcxus.app.ui.screens.PostScreen(nav, it.arguments?.getString("id")!!) }
+            composable("newpost?channel={channel}", arguments = listOf(androidx.navigation.navArgument("channel") { nullable = true; defaultValue = null })) {
+                pg.mcxus.app.ui.screens.ComposePostScreen(nav, it.arguments?.getString("channel"))
+            }
+            composable(Routes.CHANNELS) { pg.mcxus.app.ui.screens.ChannelsScreen(nav) }
+            composable("channel/{id}") { pg.mcxus.app.ui.screens.ChannelScreen(nav, it.arguments?.getString("id")!!) }
             composable(Routes.NEW_CHAT) { NewChatScreen(nav) }
             composable(Routes.NEW_GROUP) { NewGroupScreen(nav) }
             composable("group/{id}") { GroupInfoScreen(nav, it.arguments?.getString("id")!!) }

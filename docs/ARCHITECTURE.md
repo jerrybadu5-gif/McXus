@@ -21,8 +21,9 @@ Payment rails (bank statement matching → card → mobile money → cash agents
 | M2 | Marketplace: listings, photos, search, locations, stock reservation, reviews, trust score, reports | **done — PR #5** |
 | A0 | Android preview (plain Kotlin): sign-in, market, sell + photos, buy, orders + handover PIN/QR, wallet | **done — folded into #5** (ADR 0007) |
 | M3 | Messaging server + chat in the Android app (1:1, groups, media, E2EE), chat-with-seller, places | **done — PRs #7, #8** (ADR 0008–0010) |
-| M4 | Disputes (3-stage, offers, evidence, appeal), staff console, audit log | **built — awaiting Jerry's test** (ADR 0011) |
-| M5 | Status/posts, channels, calls | |
+| M4 | Disputes (3-stage, offers, evidence, appeal), staff console, audit log, freeze appeals | **done — PR #9** (ADR 0011) |
+| M5 | Status (24 h), posts with likes and comments, channels, content reports | **built — awaiting Jerry's test** (ADR 0012) |
+| M5.1–5.2 | Shorts (short videos); voice and video calls (LiveKit) | |
 | M6 | Premium privacy, subscriptions, ads, promoted listings, gifting (T2+) | |
 | M7 | Real payment rails + partner issuer go-live | |
 

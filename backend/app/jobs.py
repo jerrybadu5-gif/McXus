@@ -61,7 +61,9 @@ def purge_messages(session_factory: sessionmaker[Session] | None = None) -> int:
     from app.messaging.service import purge_expired, purge_expired_blobs
 
     with (session_factory or get_sessionmaker())() as db:
-        removed = purge_expired(db) + purge_expired_blobs(db)
+        from app.social.service import purge_expired_statuses
+
+        removed = purge_expired(db) + purge_expired_blobs(db) + purge_expired_statuses(db)
         db.commit()
     return removed
 

@@ -603,3 +603,151 @@ class MediaBlob(TimestampMixin, Base):
     uploader_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
     size: Mapped[int] = mapped_column(Integer)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+# ---------- social (module M5): status, posts, channels ----------
+# Not end-to-end encrypted (unlike chats): status is visible to the people you chat with and deleted after 24 h;
+# posts are public (or contacts-only) and moderated like listings.
+
+POST_STATUSES = ("visible", "under_review", "removed", "deleted")
+CONTENT_TARGETS = ("post", "comment", "channel")
+
+
+class Status(TimestampMixin, Base):
+    __tablename__ = "statuses"
+    __table_args__ = (
+        CheckConstraint("kind IN ('text', 'photo')", name="kind_valid"),
+        Index("ix_statuses_user_expires", "user_id", "expires_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    kind: Mapped[str] = mapped_column(String(5))
+    text: Mapped[str] = mapped_column(Text, default="")
+    color: Mapped[str] = mapped_column(String(7), default="#0B2545")
+    photo_key: Mapped[str | None] = mapped_column(String(120))
+    width: Mapped[int | None] = mapped_column(Integer)
+    height: Mapped[int | None] = mapped_column(Integer)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class StatusView(Base):
+    __tablename__ = "status_views"
+
+    status_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("statuses.id", ondelete="CASCADE"), primary_key=True)
+    viewer_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class StatusHide(Base):
+    """The owner's status is not shown to this person (even though they chat)."""
+
+    __tablename__ = "status_hides"
+
+    owner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    hidden_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), primary_key=True)
+
+
+class Channel(TimestampMixin, Base):
+    __tablename__ = "channels"
+    __table_args__ = (CheckConstraint("status IN ('active', 'suspended')", name="status_valid"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    handle: Mapped[str] = mapped_column(String(30), unique=True)
+    name: Mapped[str] = mapped_column(String(60))
+    description: Mapped[str] = mapped_column(Text, default="")
+    owner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    status: Mapped[str] = mapped_column(String(10), default="active")
+    followers: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class ChannelAdmin(Base):
+    __tablename__ = "channel_admins"
+
+    channel_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("channels.id"), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), primary_key=True)
+
+
+class ChannelFollow(Base):
+    __tablename__ = "channel_follows"
+    __table_args__ = (Index("ix_channel_follows_user", "user_id"),)
+
+    channel_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("channels.id"), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class Post(TimestampMixin, Base):
+    __tablename__ = "posts"
+    __table_args__ = (
+        CheckConstraint(_in("status", POST_STATUSES), name="status_valid"),
+        CheckConstraint("visibility IN ('everyone', 'contacts')", name="visibility_valid"),
+        Index("ix_posts_created", "created_at"),
+        Index("ix_posts_author", "author_id", "created_at"),
+        Index("ix_posts_channel", "channel_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    author_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    channel_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("channels.id"))
+    text: Mapped[str] = mapped_column(Text, default="")
+    visibility: Mapped[str] = mapped_column(String(10), default="everyone")
+    status: Mapped[str] = mapped_column(String(12), default="visible")
+    likes: Mapped[int] = mapped_column(Integer, default=0)
+    comments: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class PostPhoto(Base):
+    __tablename__ = "post_photos"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    post_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("posts.id"), index=True)
+    key: Mapped[str] = mapped_column(String(120))
+    width: Mapped[int] = mapped_column(Integer)
+    height: Mapped[int] = mapped_column(Integer)
+    position: Mapped[int] = mapped_column(SmallInteger, default=0)
+
+
+class PostLike(Base):
+    __tablename__ = "post_likes"
+
+    post_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("posts.id"), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class PostComment(TimestampMixin, Base):
+    __tablename__ = "post_comments"
+    __table_args__ = (
+        CheckConstraint(_in("status", POST_STATUSES), name="status_valid"),
+        Index("ix_post_comments_post", "post_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    post_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("posts.id"))
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    text: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(12), default="visible")
+
+
+class ContentReport(TimestampMixin, Base):
+    """A report on a post, comment or channel. Three open reports hide a post or comment until a moderator decides."""
+
+    __tablename__ = "content_reports"
+    __table_args__ = (
+        CheckConstraint(_in("target_type", CONTENT_TARGETS), name="target_valid"),
+        CheckConstraint(_in("reason", REPORT_REASONS), name="reason_valid"),
+        CheckConstraint("status IN ('open', 'actioned', 'dismissed')", name="status_valid"),
+        UniqueConstraint("target_type", "target_id", "reporter_id", name="uq_content_report_once"),
+        Index("ix_content_reports_status", "status", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    target_type: Mapped[str] = mapped_column(String(8))
+    target_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    reporter_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    reason: Mapped[str] = mapped_column(String(20))
+    note: Mapped[str] = mapped_column(String(500), default="")
+    status: Mapped[str] = mapped_column(String(10), default="open")
+    decided_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

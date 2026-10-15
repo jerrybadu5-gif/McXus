@@ -11,6 +11,8 @@ const ACTIONS: Record<string, string> = {
   deposit_recorded: "recorded a deposit", deposit_approved: "approved a deposit", deposit_rejected: "rejected a deposit",
   withdrawal_paid: "paid a withdrawal", withdrawal_failed: "marked a withdrawal failed", dispute_taken: "took a dispute",
   dispute_decided: "decided a dispute", appeal_decided: "decided an appeal", listing_remove: "removed a listing", listing_restore: "restored a listing",
+  post_remove: "removed a post", post_restore: "kept a reported post", comment_remove: "removed a comment",
+  comment_restore: "kept a reported comment", channel_remove: "suspended a channel", channel_restore: "restored a channel",
 };
 
 export function AuditPage() {

@@ -35,6 +35,11 @@ class Api(private val session: Session) {
     suspend fun put(path: String, body: JSONObject): JSONObject =
         JSONObject(call("PUT", path, body.toString().toByteArray(), "application/json"))
 
+    /** POST/PUT returning whatever JSON the server sends (e.g. a list). */
+    suspend fun postRaw(path: String, body: JSONObject): String = call("POST", path, body.toString().toByteArray(), "application/json")
+
+    suspend fun putRaw(path: String, body: JSONObject): String = call("PUT", path, body.toString().toByteArray(), "application/json")
+
     /** Upload raw bytes (an encrypted chat photo or voice note). */
     suspend fun postBytes(path: String, bytes: ByteArray): JSONObject =
         JSONObject(call("POST", path, bytes, "application/octet-stream"))
@@ -60,6 +65,26 @@ class Api(private val session: Session) {
             readTimeout = 60_000
             session.token?.let { setRequestProperty("Authorization", "Bearer $it") }
         }
+    }
+
+    suspend fun delete(path: String): String = call("DELETE", path, null, null)
+
+    /** multipart/form-data with text fields and JPEG files (all under the field name [fileField]). */
+    suspend fun multipart(path: String, fields: Map<String, String>, jpegs: List<ByteArray>, fileField: String = "files"): JSONObject {
+        val boundary = "----mcxus" + UUID.randomUUID().toString().replace("-", "")
+        val out = ByteArrayOutputStream()
+        fields.forEach { (name, value) ->
+            out.write("--$boundary\r\nContent-Disposition: form-data; name=\"$name\"\r\n\r\n".toByteArray())
+            out.write(value.toByteArray(Charsets.UTF_8))
+            out.write("\r\n".toByteArray())
+        }
+        jpegs.forEachIndexed { i, jpeg ->
+            out.write("--$boundary\r\nContent-Disposition: form-data; name=\"$fileField\"; filename=\"photo$i.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n".toByteArray())
+            out.write(jpeg)
+            out.write("\r\n".toByteArray())
+        }
+        out.write("--$boundary--\r\n".toByteArray())
+        return JSONObject(call("POST", path, out.toByteArray(), "multipart/form-data; boundary=$boundary"))
     }
 
     /** Upload one JPEG as multipart/form-data field "file". */

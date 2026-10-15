@@ -10,8 +10,8 @@ COPY migrations ./migrations
 # media: public listing photos. blobs: encrypted chat photos/voice notes (private). evidence: dispute photos
 # (private, parties and staff only). Both are Docker volumes and
 # must belong to the app user, or uploads fail with "permission denied".
-RUN mkdir -p /app/media /app/blobs /app/evidence && chown mcxus /app/media /app/blobs /app/evidence
-ENV MCXUS_MEDIA_DIR=/app/media MCXUS_BLOB_DIR=/app/blobs MCXUS_EVIDENCE_DIR=/app/evidence
+RUN mkdir -p /app/media /app/blobs /app/evidence /app/status && chown mcxus /app/media /app/blobs /app/evidence /app/status
+ENV MCXUS_MEDIA_DIR=/app/media MCXUS_BLOB_DIR=/app/blobs MCXUS_EVIDENCE_DIR=/app/evidence MCXUS_STATUS_DIR=/app/status
 USER mcxus
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s CMD python -c "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"

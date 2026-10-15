@@ -151,19 +151,38 @@ class ScreenshotTour {
             g
         }
 
+        // M5: the seller (a contact) shares a status, posts with a photo and runs a channel the buyer follows.
+        val (postId, channelId) = runBlocking {
+            sellerApi.post("/v1/status", JSONObject().put("text", "New solar lamps arrived today! Eriku market, 3 pm.").put("color", "#134074"))
+            val bmp = android.graphics.Bitmap.createBitmap(1200, 900, android.graphics.Bitmap.Config.ARGB_8888)
+            android.graphics.Canvas(bmp).apply {
+                drawColor(0xFF1B7F5A.toInt())
+                drawCircle(600f, 450f, 260f, android.graphics.Paint().apply { color = 0xFFE9A23B.toInt() })
+            }
+            val jpeg = java.io.ByteArrayOutputStream().use { bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, it); it.toByteArray() }
+            val post = sellerApi.multipart("/v1/posts", mapOf("text" to "Sunset at Eriku after a good market day. Tenkyu to all our buyers!"), listOf(jpeg))
+            app.api.post("/v1/posts/${post.getString("id")}/like")
+            app.api.postRaw("/v1/posts/${post.getString("id")}/comments", JSONObject().put("text", "Nice one! See you Saturday."))
+            val channel = sellerApi.post("/v1/channels", JSONObject().put("name", "Kila Solar News")
+                .put("handle", "kila-solar-" + Random.nextInt(1000, 9999)).put("description", "New stock, prices and market days."))
+            sellerApi.multipart("/v1/posts", mapOf("text" to "This week: 10 W panels K95, lamps K120. Pickup at Eriku gate.", "channel_id" to channel.getString("id")), emptyList())
+            app.api.post("/v1/channels/${channel.getString("id")}/follow")
+            post.getString("id") to channel.getString("id")
+        }
+
         var screen by mutableStateOf("signin")
         compose.setContent {
             McXusTheme {
                 CompositionLocalProvider(LocalApp provides app) {
                     androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) {
-                        Screen(screen, conv, listingId, orderId, group)
+                        Screen(screen, conv, listingId, orderId, group, postId, channelId, sellerId)
                         MessageHost(app, androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.BottomCenter))
                     }
                 }
             }
         }
         val dir = File(out!!).apply { mkdirs() }
-        listOf("signin", "chats", "chat", "discover", "market", "listing", "sell", "wallet", "order", "me", "place", "map", "group-chat", "group-info", "new-group", "sell-error", "error-toast", "dispute", "me-badge", "chat-dispute-card", "pending-card", "new-chat-search", "order-disputed", "dispute-decided", "frozen").forEachIndexed { i, name ->
+        listOf("signin", "chats", "chat", "discover", "market", "listing", "sell", "wallet", "order", "me", "place", "map", "group-chat", "group-info", "new-group", "sell-error", "error-toast", "dispute", "me-badge", "chat-dispute-card", "pending-card", "new-chat-search", "order-disputed", "dispute-decided", "status-view", "status-compose", "post", "new-post", "channels", "channel", "frozen").forEachIndexed { i, name ->
             if (name == "dispute") app.snackbar.currentSnackbarData?.dismiss()
             if (name == "dispute") runBlocking {
                 // The seller accepts, the buyer disputes with a photo, the seller offers K40 back.
@@ -232,7 +251,7 @@ class ScreenshotTour {
     }
 
     @Composable
-    private fun Screen(name: String, conv: String, listingId: String, orderId: String, group: String) {
+    private fun Screen(name: String, conv: String, listingId: String, orderId: String, group: String, postId: String, channelId: String, sellerId: String) {
         val nav = rememberNavController()
         when (name) {
             "signin" -> SignInScreen(onDone = {})
@@ -247,6 +266,12 @@ class ScreenshotTour {
             "order" -> OrderScreen(nav, orderId)
             "dispute" -> pg.mcxus.app.ui.screens.DisputeScreen(nav, orderId)
             "new-chat-search" -> pg.mcxus.app.ui.screens.NewChatScreen(nav)
+            "status-view" -> pg.mcxus.app.ui.screens.StatusViewerScreen(nav, sellerId)
+            "status-compose" -> pg.mcxus.app.ui.screens.StatusComposeScreen(nav)
+            "post" -> pg.mcxus.app.ui.screens.PostScreen(nav, postId)
+            "new-post" -> pg.mcxus.app.ui.screens.ComposePostScreen(nav, null)
+            "channels" -> pg.mcxus.app.ui.screens.ChannelsScreen(nav)
+            "channel" -> pg.mcxus.app.ui.screens.ChannelScreen(nav, channelId)
             "frozen" -> pg.mcxus.app.ui.screens.FrozenScreen()
             "place" -> androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.padding(16.dp)) {
                 pg.mcxus.app.ui.PlaceField("Meet-up / pickup point", pg.mcxus.app.util.Place.of(-6.729, 146.997, "Eriku market gate"), {})
