@@ -47,7 +47,9 @@ private val tabs = listOf(
 @Composable
 fun HomeScreen(nav: NavHostController, initialTab: Int = 0) {
     var tab by rememberSaveable(initialTab) { mutableIntStateOf(initialTab) }
-    val chat = LocalApp.current.chat
+    val app = LocalApp.current
+    val chat = app.chat
+    androidx.compose.runtime.LaunchedEffect(tab) { if (tab == 4) app.checkDisputes() } // fresh badge when Me opens
     val conversations = chat?.conversations?.collectAsState()?.value.orEmpty()
     val unread = conversations.sumOf { it.unread }
     // Android 13+: ask once for permission to show new-message notifications.
@@ -89,11 +91,13 @@ fun HomeScreen(nav: NavHostController, initialTab: Int = 0) {
                         ) {
                             Icon(t.icon, contentDescription = null, tint = if (on) Mx.Navy else Mx.Muted, modifier = Modifier.size(22.dp))
                         }
-                        if (i == 0 && unread > 0) {
+                        val count = when (i) { 0 -> unread; 4 -> app.disputeAttention; else -> 0 }
+                        if (count > 0) {
                             Text(
-                                if (unread > 99) "99+" else unread.toString(),
-                                modifier = Modifier.align(Alignment.TopEnd).clip(RoundedCornerShape(9.dp)).background(Mx.Blue)
-                                    .padding(horizontal = 5.dp),
+                                if (count > 99) "99+" else count.toString(),
+                                modifier = Modifier.align(Alignment.TopEnd).clip(RoundedCornerShape(9.dp))
+                                    .background(if (i == 4) Mx.Red else Mx.Blue).padding(horizontal = 5.dp)
+                                    .testTag(if (i == 4) "me-badge" else "chats-badge"),
                                 color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold,
                             )
                         }

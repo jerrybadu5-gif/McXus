@@ -6,8 +6,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.api.chat_routes import router as chat_router
+from app.api.dispute_routes import router as dispute_router
 from app.api.market_routes import router as market_router
 from app.api.routes import router
+from app.api.staff_routes import router as staff_router
 from app.config import get_settings
 from app.errors import AppError, app_error_handler
 
@@ -44,7 +46,7 @@ async def security_headers(request: Request, call_next):  # type: ignore[no-unty
 
 # Raised whenever the app needs new server features, so an old server is reported clearly instead of "Not Found".
 # 1 = M1-M2, 2 = M3 chat, 3 = M3.1 places, 4 = M3.2 groups/media/push, 5 = one device per account holds the keys.
-API_LEVEL = 5
+API_LEVEL = 7  # 7 = freezes + appeals, people search, dispute alerts (M4.1); 6 = disputes (M4)
 
 
 @app.get("/health", tags=["health"])
@@ -55,6 +57,8 @@ def health() -> dict[str, object]:
 app.include_router(router)
 app.include_router(market_router)
 app.include_router(chat_router)
+app.include_router(dispute_router)
+app.include_router(staff_router)
 
 # Listing photos (public). Replaced by object storage + CDN before launch.
 os.makedirs(settings.media_dir, exist_ok=True)

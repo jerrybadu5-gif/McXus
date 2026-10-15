@@ -1,5 +1,6 @@
-"""Background worker: applies escrow timers (20-minute accept window, 7-day auto-release) and deletes
-expired encrypted messages (30 days).
+"""Background worker: applies escrow timers (20-minute accept window, 7-day auto-release), dispute deadlines
+(negotiation -> mediator after 3 days; a mediator's decision becomes final after the 3-day appeal window) and
+deletes expired encrypted messages (30 days).
 
 Run with:  python -m app.jobs        (loops every MCXUS_WORKER_INTERVAL_SECONDS)
            python -m app.jobs --once
@@ -34,6 +35,21 @@ def run_timers(session_factory: sessionmaker[Session] | None = None) -> dict[str
             except AppError:
                 db.rollback()
                 log.exception("Timer failed for order %s", order_id)
+                status = "FAILED"
+        if status:
+            results[status] = results.get(status, 0) + 1
+    from app.disputes.service import apply_deadline, due_dispute_ids
+
+    with factory() as db:
+        dispute_orders = due_dispute_ids(db, clock.now())
+    for order_id in dispute_orders:
+        with factory() as db:
+            try:
+                status = apply_deadline(db, order_id)
+                db.commit()
+            except AppError:
+                db.rollback()
+                log.exception("Dispute deadline failed for order %s", order_id)
                 status = "FAILED"
         if status:
             results[status] = results.get(status, 0) + 1

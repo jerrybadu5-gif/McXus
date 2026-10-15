@@ -6,9 +6,9 @@ Full requirements: Developer project doc `mcxus-requirements.md`. This file cove
 
 ```
 Android app (Kotlin) ──HTTPS──> Caddy ──> Core API (FastAPI) ──> PostgreSQL (core, ledger)
-        │                                   └── worker (timers)
+        │                                   └── worker (escrow timers, dispute deadlines, chat expiry)
         └──── E2EE messaging ──> McXus messaging server (module M3, own build on audited crypto libs)
-Admin console (React, staff only) ──> Core API
+Staff console (React, nginx :8080, staff only) ──/v1──> Core API
 Payment rails (bank statement matching → card → mobile money → cash agents) ──> adapters ──> ledger
 ```
 
@@ -18,10 +18,10 @@ Payment rails (bank statement matching → card → mobile money → cash agents
 |---|---|---|
 | M0 | Repo, compose, CI, phone sign-in, roles | **done (in this module)** |
 | M1 | Ledger, wallet (sandbox), escrow, fees, timers | **done — passed 14/10/2026 (PR #1)** |
-| M2 | Marketplace: listings, photos, search, locations, stock reservation, reviews, trust score, reports | **built — awaiting Jerry's review** |
-| A0 | Android preview (plain Kotlin): sign-in, market, sell + photos, buy, orders + handover PIN/QR, wallet | **built — awaiting phone test** (ADR 0007) |
-| M3 | Messaging server + chat in the Android app (1:1, groups, media, E2EE, key backup), chat-with-seller | |
-| M4 | Disputes (3-stage, evidence), admin console | |
+| M2 | Marketplace: listings, photos, search, locations, stock reservation, reviews, trust score, reports | **done — PR #5** |
+| A0 | Android preview (plain Kotlin): sign-in, market, sell + photos, buy, orders + handover PIN/QR, wallet | **done — folded into #5** (ADR 0007) |
+| M3 | Messaging server + chat in the Android app (1:1, groups, media, E2EE), chat-with-seller, places | **done — PRs #7, #8** (ADR 0008–0010) |
+| M4 | Disputes (3-stage, offers, evidence, appeal), staff console, audit log | **built — awaiting Jerry's test** (ADR 0011) |
 | M5 | Status/posts, channels, calls | |
 | M6 | Premium privacy, subscriptions, ads, promoted listings, gifting (T2+) | |
 | M7 | Real payment rails + partner issuer go-live | |

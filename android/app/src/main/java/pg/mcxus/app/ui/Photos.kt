@@ -33,17 +33,23 @@ fun PhotoButtons(listingId: String, onUploaded: () -> Unit) {
     var cameraUri by remember { mutableStateOf<Uri?>(null) }
     var busy by remember { mutableStateOf(false) }
 
-    fun upload(uri: Uri) {
+    /** Upload one or several photos, one after another (the server stops at the listing's limit). */
+    fun upload(uris: List<Uri>) {
+        if (uris.isEmpty()) return
         busy = true
         app.launch(onDone = { busy = false }) {
-            val jpeg = withContext(Dispatchers.Default) { Images.prepareUpload(context.contentResolver, uri) }
-            app.api.upload("/v1/listings/$listingId/photos", jpeg)
-            app.say("Photo added")
-            onUploaded()
+            uris.forEach { uri ->
+                val jpeg = withContext(Dispatchers.Default) { Images.prepareUpload(context.contentResolver, uri) }
+                app.api.upload("/v1/listings/$listingId/photos", jpeg)
+                onUploaded()
+            }
+            app.say(if (uris.size == 1) "Photo added" else "${uris.size} photos added")
         }
     }
+    fun upload(uri: Uri) = upload(listOf(uri))
 
-    val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let(::upload) }
+    // Pick several at once (up to 5, the listing limit).
+    val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(5)) { uris -> upload(uris) }
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok -> if (ok) cameraUri?.let(::upload) }
 
     fun openCamera() {

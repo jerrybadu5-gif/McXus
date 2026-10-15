@@ -200,22 +200,139 @@ class OrderEvent(TimestampMixin, Base):
     data: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
 
 
+DISPUTE_STAGES = (
+    "negotiation",  # buyer and seller try to agree (3 days); either can ask for a mediator earlier
+    "mediation",  # a mediator reviews the evidence and decides (5 PNG business days)
+    "decided",  # the mediator decided; 3 days to appeal (money moves when the window ends or both accept)
+    "appeal",  # a senior staff member (compliance/admin) makes the final decision
+    "resolved",  # money has moved; closed
+)
+
+
 class Dispute(TimestampMixin, Base):
+    """Three-stage dispute on an order (ADR 0011). The order stays DISPUTED, with Stars frozen in escrow, until
+    the dispute is resolved; only then does money move (one ledger entry, like any release)."""
+
     __tablename__ = "disputes"
     __table_args__ = (
-        CheckConstraint("status IN ('open', 'resolved')", name="status_valid"),
+        CheckConstraint(_in("status", DISPUTE_STAGES), name="stage_valid"),
         CheckConstraint("buyer_refund IS NULL OR buyer_refund >= 0", name="refund_not_negative"),
+        CheckConstraint("proposed_refund IS NULL OR proposed_refund >= 0", name="proposed_not_negative"),
+        CheckConstraint("outcome IS NULL OR outcome IN ('agreed', 'mediator', 'senior')", name="outcome_valid"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     order_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orders.id"), unique=True)
     opened_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
     reason: Mapped[str] = mapped_column(Text)
-    status: Mapped[str] = mapped_column(String(10), default="open")
+    status: Mapped[str] = mapped_column(String(12), default="negotiation", index=True)
+    negotiate_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    escalated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    mediator_due: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    mediator_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))  # who took the case
+    # The mediator's decision (stage 2); final once the appeal window ends or both parties accept it.
+    proposed_refund: Mapped[Decimal | None] = mapped_column(Money)
+    proposed_note: Mapped[str] = mapped_column(Text, default="")
+    decided_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    appeal_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    buyer_accepted: Mapped[bool] = mapped_column(Boolean, default=False)
+    seller_accepted: Mapped[bool] = mapped_column(Boolean, default=False)
+    appealed_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    appeal_reason: Mapped[str] = mapped_column(Text, default="")
+    appealed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # The outcome (money moved).
+    outcome: Mapped[str | None] = mapped_column(String(10))
     buyer_refund: Mapped[Decimal | None] = mapped_column(Money)
     decision_note: Mapped[str] = mapped_column(Text, default="")
     resolved_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class DisputeOffer(TimestampMixin, Base):
+    """A settlement offer between buyer and seller: how much of the order the buyer gets back."""
+
+    __tablename__ = "dispute_offers"
+    __table_args__ = (
+        CheckConstraint("buyer_refund >= 0", name="refund_not_negative"),
+        CheckConstraint(
+            "status IN ('open', 'accepted', 'rejected', 'withdrawn', 'replaced', 'lapsed')", name="status_valid"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    dispute_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("disputes.id"), index=True)
+    by_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    buyer_refund: Mapped[Decimal] = mapped_column(Money)
+    note: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(10), default="open")
+    answered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class DisputeEvidence(TimestampMixin, Base):
+    """A written statement or a photo added by the buyer or seller. Readable by both parties and staff (not
+    end-to-end encrypted, the mediator must see it); photos have metadata stripped. Kept with the order record."""
+
+    __tablename__ = "dispute_evidence"
+    __table_args__ = (CheckConstraint("kind IN ('statement', 'photo')", name="kind_valid"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    dispute_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("disputes.id"), index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    kind: Mapped[str] = mapped_column(String(10))
+    text: Mapped[str] = mapped_column(Text, default="")
+    file_key: Mapped[str | None] = mapped_column(String(200))
+    width: Mapped[int | None] = mapped_column(Integer)
+    height: Mapped[int | None] = mapped_column(Integer)
+
+
+class DisputeEvent(TimestampMixin, Base):
+    """Timeline of a dispute (opened, offers, escalation, decision, appeal, outcome) for both apps and staff."""
+
+    __tablename__ = "dispute_events"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    dispute_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("disputes.id"), index=True)
+    actor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))  # None = system (a deadline)
+    kind: Mapped[str] = mapped_column(String(24))
+    text: Mapped[str] = mapped_column(Text, default="")
+
+
+class StaffAction(TimestampMixin, Base):
+    """Audit trail of staff actions (tier and role changes, freezes, money decisions, disputes, moderation).
+    Append-only by convention; shown to admin and compliance in the console."""
+
+    __tablename__ = "staff_actions"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    actor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
+    action: Mapped[str] = mapped_column(String(40))
+    target_type: Mapped[str] = mapped_column(String(20))
+    target_id: Mapped[str] = mapped_column(String(64), index=True)
+    detail: Mapped[str] = mapped_column(Text, default="")
+
+
+class AccountFreeze(TimestampMixin, Base):
+    """One freeze of an account, from freezing to unfreezing: why, by whom, the person's appeal and the decision.
+    Unfreezing (or refusing an appeal) must be done by a different staff member from the one who froze it."""
+
+    __tablename__ = "account_freezes"
+    __table_args__ = (
+        CheckConstraint("status IN ('frozen', 'appealed', 'unfrozen', 'upheld')", name="status_valid"),
+        Index("ix_account_freezes_user", "user_id", "status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    status: Mapped[str] = mapped_column(String(10), default="frozen")
+    reason: Mapped[str] = mapped_column(Text)
+    frozen_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))  # None: frozen before M4.1
+    frozen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    appeal_text: Mapped[str] = mapped_column(Text, default="")
+    appealed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    decided_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    decision_note: Mapped[str] = mapped_column(Text, default="")
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Deposit(TimestampMixin, Base):

@@ -210,10 +210,8 @@ fun ListingScreen(nav: NavHostController, listingId: String) {
                     app.launch(onDone = { busy = false }) {
                         val conv = engine.open(seller.str("id"), listingId)
                         val thumb = photos.firstOrNull()?.str("thumb_url") ?: ""
-                        if (engine.messages(conv).none { Payload.parse(it.payload).optString("id") == listingId }) {
-                            // First time this listing is discussed: share its card so both sides see what it's about.
-                            runCatching { engine.send(conv, Payload.listing(listingId, item.str("title"), item.str("price"), thumb)) }
-                        }
+                        // The listing goes with my next message, like replying to it (shown above the message box).
+                        app.pendingCard[conv] = Payload.listing(listingId, item.str("title"), item.str("price"), thumb)
                         nav.navigate(Routes.chat(conv))
                     }
                 })

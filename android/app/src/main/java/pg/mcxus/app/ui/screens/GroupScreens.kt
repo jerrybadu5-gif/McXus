@@ -58,6 +58,7 @@ import pg.mcxus.app.ui.Ic
 import pg.mcxus.app.ui.LineButton
 import pg.mcxus.app.ui.Loading
 import pg.mcxus.app.ui.Note
+import pg.mcxus.app.ui.PeopleSearch
 import pg.mcxus.app.ui.Tag
 import pg.mcxus.app.ui.rememberLoader
 import pg.mcxus.app.ui.str
@@ -79,22 +80,17 @@ private fun PeoplePicker(
     var phone by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Field(phone, { phone = it }, "Add by mobile number", keyboard = KeyboardType.Phone, modifier = Modifier.weight(1f), tag = "group-phone")
-            LineButton(if (busy) "…" else "Find", enabled = phone.isNotBlank() && !busy, onClick = {
-                busy = true
-                app.launch(onDone = { busy = false }) {
-                    val found = app.api.post("/v1/users/lookup", JSONObject().put("phone", phone))
-                    onFound(Candidate(found.str("id"), found.str("name")))
-                    phone = ""
-                }
-            })
-        }
+        PeopleSearch(phone, { phone = it }, onPick = { found ->
+            onFound(Candidate(found.str("id"), found.str("name")))
+            phone = ""
+        }, label = "Add by name or mobile number", tag = "group-phone")
         if (candidates.isEmpty()) {
-            Text("People you chat with appear here. You can also add anyone by mobile number.", color = Mx.Muted, fontSize = 13.sp)
+            Text("People you chat with appear here. You can also add anyone by name or mobile number.", color = Mx.Muted, fontSize = 13.sp)
         }
+        // Typing also filters the people you already chat with (any case).
+        val words = phone.trim().lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() && !it.all(Char::isDigit) }
         Column(Modifier.clip(RoundedCornerShape(16.dp)).background(Color.White)) {
-            candidates.forEach { c ->
+            candidates.filter { c -> words.all { c.name.lowercase().contains(it) } || c.id in selected }.forEach { c ->
                 Row(
                     Modifier.fillMaxWidth().clickable { onToggle(c.id) }.padding(horizontal = 12.dp, vertical = 8.dp).testTag("pick-${c.name}"),
                     verticalAlignment = Alignment.CenterVertically,

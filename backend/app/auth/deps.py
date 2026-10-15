@@ -25,6 +25,16 @@ def current_user(creds: HTTPAuthorizationCredentials | None = Depends(bearer), d
     return user
 
 
+def signed_in_user(creds: HTTPAuthorizationCredentials | None = Depends(bearer), db: Session = Depends(get_db)) -> User:
+    """Any signed-in person, frozen or not. Only for /me and the frozen person's own freeze and appeal."""
+    if creds is None:
+        raise Unauthorized("Sign in first")
+    user = db.get(User, decode_token(creds.credentials))
+    if user is None:
+        raise Unauthorized("Sign in again")
+    return user
+
+
 def require_role(*roles: str) -> Callable[..., User]:
     """Staff endpoints. 'admin' can do everything."""
 

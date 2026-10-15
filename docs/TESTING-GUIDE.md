@@ -168,8 +168,53 @@ Use two phones, or one phone plus the laptop emulator. Push needs the Firebase s
 | G6 | Group info (tap the group name) → **Add people** | new person joins and can read new messages (not older ones) |
 | G7 | Group info → tap a member → **Remove from group** | they see "You were removed"; they no longer get messages |
 | G8 | A member taps **Leave group** | "<name> left"; the admin's phone removes their keys automatically |
-| G9 | Close McXus on phone A; send it a message from phone B | notification on A within seconds: name + text (lock screen: "New message") |
-| G10 | Me → **Notifications** → Hide text, repeat G9 | notification says only "New message" |
+| G9 | Close McXus on phone A; send it a message from phone B | notification on A within seconds: "McXus · New message" |
+| G10 | Me → **Notifications** → Show text, repeat G9 | notification shows the name and text (lock screen still "New message") |
 | G11 | Try to send a 10-minute voice note | recording stops at 5 minutes |
 | G12 | Demo buyer on the emulator and the phone. Tap the phone (it is now the device in use), switch the phone to the seller, make a group with the demo buyer and send a message | the emulator shows one grey note "This chat is set up on your other device…" and "Read and reply… on your other device" instead of the message box; the seller sees no grey note; switching the phone back to the buyer shows the message |
 | G13 | Lock the phone or leave McXus, then get a message | notification says "McXus · New message" only (Me › Notifications › Show text turns on name and text) |
+
+## 9. M4 disputes and the staff console (45 minutes)
+
+Rebuild first: task **McXus: start backend** (it now also starts the staff console), then reinstall the app
+(Ctrl+Shift+B). Optional sample cases: task **McXus: sample disputes (sandbox)**.
+
+Staff console: task **McXus: open staff console** (it opens the right address; usually http://localhost:8080,
+another port if Windows has reserved 8080). Sign in with a demo staff number; the
+sandbox fills in the code. Mediator 70000005 · compliance 70000009 · finance 70000003 and 70000004 · moderator
+70000007 · KYC 70000010 · support 70000011 · admin 70000006.
+
+| # | Do | You should see |
+|---|---|---|
+| D1 | App, demo buyer: buy something from the demo seller, pay; seller accepts. Buyer: order → **Problem with the item? Open a dispute**, write what went wrong | the dispute screen: stage "Agree", the 3-day deadline, your statement |
+| D2 | Buyer: **Add a photo** (camera or gallery) | the photo appears under your statements; the seller sees it too |
+| D3 | Seller: Me → **Disputes** → the case → **Make an offer** (e.g. Half) | buyer sees "The seller offered… waiting for you" with Reject / Accept |
+| D4 | Buyer: **Accept** | "Closed": buyer got back the offer, seller the rest less 3%; check both wallets |
+| D5 | New dispute; buyer taps **Ask a mediator now** | stage "Mediator", due in 5 working days; console: Disputes shows it under "Need a mediator" |
+| D6 | Console as mediator: open it → **Take the case** → **Decide the refund** → Half, write a reason → Decide | the case moves to "Decided"; in the app both see the decision with **Accept** / **Appeal (once)** |
+| D7 | App: seller taps **Appeal (once)** with a reason | stage "Appeal"; console as mediator: no decide button (the mediator can't hear the appeal) |
+| D8 | Console as compliance: Disputes → Appeals → **Make the final decision** | "Resolved (appeal decision)"; wallets updated; Money reports → "Every entry balances" |
+| D9 | New dispute, mediator decides, both parties tap **Accept the decision** | closes at once without waiting 3 days |
+| D10 | Console as finance A: **Record a bank deposit** for the demo buyer; then as finance B approve it | A can't approve their own; after B approves, the buyer's wallet goes up |
+| D11 | Console as admin: People → find the demo seller → **Change verification**, **Freeze account** (compliance or admin) | the seller can't use the app while frozen; Staff activity lists both actions with your name |
+| D12 | Console on a phone-size window | the menu moves to the top; lists and cases stack |
+
+### 9b. Your M4 comments (M4.1)
+
+| # | Do | You should see |
+|---|---|---|
+| D13 | Buyer opens a dispute | the seller gets a dispute card in their chat with the buyer (and a chat notification); Me shows a red badge, Me › Disputes "1 waiting for you" |
+| D14 | Seller makes an offer | the buyer gets the dispute card "Offer: buyer gets back K…" in the chat, the badge, and a notification "A dispute needs your answer" (name and text if Me › Notifications › Show text) |
+| D15 | Dispute → Add a photo → Choose from gallery | you can tick several photos (up to 5); same in chat (+ › Photo from gallery, up to 10) and Sell |
+| D16 | Discover → a post → **Message** | the chat opens with the listing shown above the message box; type a message and send: the listing card goes first, then your message. ✕ removes it |
+| D17 | Chats → New chat: type part of a name in any case ("kila solar", "SOLAR KILA") | suggestions appear as you type; tap one to start the chat. Also in New group / Add people |
+| D18 | Console on a narrow window (or phone) | **Sign out** at the top right |
+| D19 | Console People / Record a bank deposit: type "demo b" | suggestions as you type, not case-sensitive |
+| D20 | Console as compliance: People → Second Buyer → **Freeze account** with a reason | the app on that account shows "Your account is frozen", the reason and an **Appeal** box |
+| D21 | In the app: send an appeal | console **Frozen accounts** shows "Appeal waiting" (gold count); as the same compliance officer you can't decide ("You froze this account…") |
+| D22 | Console as admin (a different person): **Unfreeze** with what you checked (or **Keep frozen** with a reason) | the app opens normally after **Check again** (or shows the refusal and reason); Staff activity lists both steps |
+
+### Please confirm
+
+- Are the three windows right: **3 days** to agree, **5 PNG working days** for the mediator, **3 days** to appeal?
+- Should the senior decision be **compliance or admin** (as built), or a separate "senior mediator" role?

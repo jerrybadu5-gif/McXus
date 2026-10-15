@@ -64,6 +64,23 @@ jobs:
           name: mcxus-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
 
+  admin:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: admin/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
   docker:
     runs-on: ubuntu-latest
     steps:

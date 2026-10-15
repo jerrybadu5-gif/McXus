@@ -121,7 +121,7 @@ class ChatEngine private constructor(
                 } catch (e: ApiError) {
                     Log.w(TAG, "chat: ${e.code} ${e.message}")
                     _online.value = false
-                    if (e.status == 401) return@launch // signed out elsewhere; the UI handles sign-in
+                    if (e.status == 401 || e.code == "account_frozen") return@launch // signed out or frozen: the UI handles it
                     delay(5_000)
                 } catch (e: Exception) {
                     Log.w(TAG, "chat offline: ${e.message}")

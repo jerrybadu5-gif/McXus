@@ -300,24 +300,39 @@ def reissue_pin(db: Session, buyer: User, order_id: uuid.UUID) -> str:
     return _new_pin(order)
 
 
-# ---------- disputes (staged negotiation and evidence come in module M4) ----------
+# ---------- disputes (stages, offers and evidence: app/disputes/service.py, ADR 0011) ----------
 
 
 def open_dispute(db: Session, user: User, order_id: uuid.UUID, reason: str) -> Dispute:
+    """Freeze the order (no auto-release) and start the negotiation stage."""
     order = get_order(db, order_id, lock=True)
     if user.id not in (order.buyer_id, order.seller_id):
         raise NotFound("Order not found")
+    reason = reason.strip()
+    if not reason:
+        raise AppError("Say what went wrong", code="reason_required")
     _transition(db, order, "DISPUTED", user.id, reason)
-    dispute = Dispute(id=uuid.uuid4(), order_id=order.id, opened_by=user.id, reason=reason)
+    now = clock.now()
+    dispute = Dispute(
+        id=uuid.uuid4(),
+        order_id=order.id,
+        opened_by=user.id,
+        reason=reason,
+        status="negotiation",
+        negotiate_until=now + timedelta(days=get_settings().dispute_negotiate_days),
+        created_at=now,
+    )
     db.add(dispute)
     db.flush()
     return dispute
 
 
-def resolve_dispute(db: Session, mediator: User, order_id: uuid.UUID, buyer_refund: Decimal, note: str) -> Order:
+def settle_dispute(
+    db: Session, order_id: uuid.UUID, buyer_refund: Decimal, actor_id: uuid.UUID | None, note: str, outcome: str
+) -> Order:
+    """Move the money for a dispute's outcome (agreement, mediator after the appeal window, or senior decision):
+    refund part to the buyer, pay the rest to the seller less the escrow fee. One ledger entry."""
     order = get_order(db, order_id, lock=True)
-    if mediator.id in (order.buyer_id, order.seller_id):
-        raise Forbidden("You cannot decide a dispute you are part of")
     if order.status != "DISPUTED":
         raise Conflict("This order is not in dispute", code="invalid_transition")
     if not ZERO <= buyer_refund <= order.amount:
@@ -328,16 +343,25 @@ def resolve_dispute(db: Session, mediator: User, order_id: uuid.UUID, buyer_refu
         order,
         seller_gross=order.amount - buyer_refund,
         buyer_refund=buyer_refund,
-        actor_id=mediator.id,
+        actor_id=actor_id,
         to="RESOLVED",
         reason=note or "Dispute resolved",
     )
     dispute.status = "resolved"
+    dispute.outcome = outcome
     dispute.buyer_refund = buyer_refund
     dispute.decision_note = note
-    dispute.resolved_by = mediator.id
+    dispute.resolved_by = actor_id
     dispute.resolved_at = clock.now()
     return order
+
+
+def resolve_dispute(db: Session, mediator: User, order_id: uuid.UUID, buyer_refund: Decimal, note: str) -> Order:
+    """Staff settle a dispute at once (used by tests and data fixes; the app flow is in app/disputes)."""
+    order = get_order(db, order_id)
+    if mediator.id in (order.buyer_id, order.seller_id):
+        raise Forbidden("You cannot decide a dispute you are part of")
+    return settle_dispute(db, order_id, buyer_refund, mediator.id, note, "mediator")
 
 
 # ---------- timers (run by the worker) ----------

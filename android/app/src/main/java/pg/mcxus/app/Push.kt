@@ -41,6 +41,7 @@ class McXusMessagingService : FirebaseMessagingService() {
             withTimeoutOrNull(8_000) {
                 val engine = app.ensureChat() ?: return@withTimeoutOrNull
                 runCatching { engine.syncOnce() }
+                app.checkDisputes() // a push may also mean a dispute update
                 delay(300) // let the notification collector run
             }
         }

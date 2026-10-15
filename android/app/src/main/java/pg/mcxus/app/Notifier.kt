@@ -61,6 +61,33 @@ object Notifier {
         context.getSystemService(NotificationManager::class.java)?.notify(incoming.conversationId.hashCode(), notification)
     }
 
+    /** A dispute needs my answer (new dispute, an offer, a decision). Tap opens the dispute. */
+    fun showDispute(context: Context, app: App, orderId: String, title: String, what: String) {
+        if (!allowed(context)) return
+        val show = app.session.showPreviews
+        val open = PendingIntent.getActivity(
+            context, ("dispute:$orderId").hashCode(),
+            Intent(context, MainActivity::class.java).putExtra(MainActivity.EXTRA_DISPUTE, orderId)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val public = android.app.Notification.Builder(context, CHANNEL)
+            .setSmallIcon(R.drawable.ic_notification).setContentTitle("McXus").setContentText("A dispute needs your answer").build()
+        val text = if (show) "$title: $what" else "A dispute needs your answer"
+        val notification = android.app.Notification.Builder(context, CHANNEL)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setColor(0xFF0B2545.toInt())
+            .setContentTitle(if (show) "Dispute" else "McXus")
+            .setContentText(text)
+            .setStyle(android.app.Notification.BigTextStyle().bigText(text))
+            .setVisibility(android.app.Notification.VISIBILITY_PRIVATE)
+            .setPublicVersion(public)
+            .setAutoCancel(true)
+            .setContentIntent(open)
+            .build()
+        context.getSystemService(NotificationManager::class.java)?.notify(("dispute:$orderId").hashCode(), notification)
+    }
+
     fun clear(context: Context, conversationId: String) {
         context.getSystemService(NotificationManager::class.java)?.cancel(conversationId.hashCode())
     }
