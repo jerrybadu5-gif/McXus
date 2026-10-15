@@ -101,6 +101,12 @@ fun MeTab(nav: NavHostController) {
             Row_(Ic.Edit, "Edit profile & my listings") { nav.navigate(Routes.PROFILE) }
             Row_(Ic.Receipt, "My orders") { nav.navigate(Routes.ORDERS) }
             Row_(Ic.Store, "Sell something") { nav.navigate(Routes.SELL) }
+            var previews by remember { mutableStateOf(app.session.showPreviews) }
+            Row_(Ic.Bell, "Notifications", if (previews) "Show text" else "Hide text", tag = "notif-previews") {
+                previews = !previews
+                app.session.showPreviews = previews
+                app.say(if (previews) "Notifications show who wrote and the message" else "Notifications say only \"New message\"")
+            }
             Row_(Ic.Lock, "Privacy", "E2E encrypted") { app.say("Chats are end-to-end encrypted with MLS. Verify a contact with ⋮ › Safety number in a chat.") }
             Row_(Ic.Server, "Server", app.session.server.removePrefix("http://").removePrefix("https://").take(22)) { editingServer = true }
             Row_(Ic.Logout, "Sign out", tag = "sign-out") { signingOut = true }

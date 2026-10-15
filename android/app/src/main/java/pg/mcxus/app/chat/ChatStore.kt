@@ -14,6 +14,8 @@ data class LocalMessage(
     val payload: String,
     val at: Long,
     val unread: Boolean,
+    /** Sender's user id ("" for local notices). Needed in groups to show who wrote what. */
+    val sender: String = "",
 )
 
 /**
@@ -21,7 +23,7 @@ data class LocalMessage(
  * 30 days and cannot read it). One database per signed-in user. Backups are off in the manifest.
  */
 class ChatStore(context: Context, userId: String) :
-    SQLiteOpenHelper(context, "chat-$userId.db", null, 1) {
+    SQLiteOpenHelper(context, "chat-$userId.db", null, 2) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
@@ -32,13 +34,16 @@ class ChatStore(context: Context, userId: String) :
                  mine INTEGER NOT NULL,
                  payload TEXT NOT NULL,
                  at INTEGER NOT NULL,
-                 unread INTEGER NOT NULL DEFAULT 0)""",
+                 unread INTEGER NOT NULL DEFAULT 0,
+                 sender TEXT NOT NULL DEFAULT '')""",
         )
         db.execSQL("CREATE INDEX ix_messages_conv ON messages(conv, at)")
         db.execSQL("CREATE TABLE kv (k TEXT PRIMARY KEY, v TEXT NOT NULL)")
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) db.execSQL("ALTER TABLE messages ADD COLUMN sender TEXT NOT NULL DEFAULT ''")
+    }
 
     fun get(key: String): String? =
         readableDatabase.rawQuery("SELECT v FROM kv WHERE k = ?", arrayOf(key)).use { if (it.moveToFirst()) it.getString(0) else null }
@@ -50,7 +55,15 @@ class ChatStore(context: Context, userId: String) :
     }
 
     /** Insert once per server message id (a repeated sync never duplicates). */
-    fun add(conversationId: String, serverId: Long?, mine: Boolean, payload: String, at: Long, unread: Boolean) {
+    fun add(
+        conversationId: String,
+        serverId: Long?,
+        mine: Boolean,
+        payload: String,
+        at: Long,
+        unread: Boolean,
+        sender: String = "",
+    ) {
         writableDatabase.insertWithOnConflict(
             "messages", null,
             ContentValues().apply {
@@ -60,6 +73,7 @@ class ChatStore(context: Context, userId: String) :
                 put("payload", payload)
                 put("at", at)
                 put("unread", if (unread) 1 else 0)
+                put("sender", sender)
             },
             SQLiteDatabase.CONFLICT_IGNORE,
         )
@@ -67,7 +81,7 @@ class ChatStore(context: Context, userId: String) :
 
     fun messages(conversationId: String): List<LocalMessage> =
         readableDatabase.rawQuery(
-            "SELECT id, conv, server_id, mine, payload, at, unread FROM messages WHERE conv = ? ORDER BY at, id",
+            "SELECT id, conv, server_id, mine, payload, at, unread, sender FROM messages WHERE conv = ? ORDER BY at, id",
             arrayOf(conversationId),
         ).use { c ->
             buildList {
@@ -75,7 +89,7 @@ class ChatStore(context: Context, userId: String) :
                     add(
                         LocalMessage(
                             c.getLong(0), c.getString(1), if (c.isNull(2)) null else c.getLong(2), c.getInt(3) == 1,
-                            c.getString(4), c.getLong(5), c.getInt(6) == 1,
+                            c.getString(4), c.getLong(5), c.getInt(6) == 1, c.getString(7),
                         ),
                     )
                 }
@@ -91,6 +105,16 @@ class ChatStore(context: Context, userId: String) :
             null,
         ).use { c ->
             buildMap { while (c.moveToNext()) put(c.getString(0), Triple(c.getString(1), c.getLong(2), c.getInt(3))) }
+        }
+
+    fun message(serverId: Long): LocalMessage? =
+        readableDatabase.rawQuery(
+            "SELECT id, conv, server_id, mine, payload, at, unread, sender FROM messages WHERE server_id = ?",
+            arrayOf(serverId.toString()),
+        ).use { c ->
+            if (!c.moveToFirst()) null
+            else LocalMessage(c.getLong(0), c.getString(1), c.getLong(2), c.getInt(3) == 1, c.getString(4), c.getLong(5),
+                c.getInt(6) == 1, c.getString(7))
         }
 
     fun markRead(conversationId: String) {

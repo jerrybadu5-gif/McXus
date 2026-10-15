@@ -10,6 +10,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import pg.mcxus.app.chat.ChatEngine
 import pg.mcxus.app.net.Api
 import pg.mcxus.app.net.ApiError
@@ -30,18 +31,35 @@ class App(context: Context, val scope: CoroutineScope) {
         private set
     var displayName by mutableStateOf("")
 
-    fun say(message: String) {
-        scope.launch { snackbar.currentSnackbarData?.dismiss(); snackbar.showSnackbar(message) }
+    /** Short message shown just above the keyboard (or the tab bar). Errors are shown in red. */
+    fun say(message: String, error: Boolean = false) {
+        scope.launch {
+            snackbar.currentSnackbarData?.dismiss()
+            snackbar.showSnackbar(message, actionLabel = if (error) ERROR else null, duration = androidx.compose.material3.SnackbarDuration.Long)
+        }
+    }
+
+    /** Server feature level (from /health). The app needs [MIN_SERVER_LEVEL]; older servers answer "Not Found". */
+    var serverLevel by mutableStateOf<Int?>(null)
+        private set
+    val serverOutdated: Boolean get() = serverLevel?.let { it < MIN_SERVER_LEVEL } == true
+
+    fun checkServer() {
+        scope.launch {
+            serverLevel = runCatching { api.obj("/health").optInt("api_level", 1) }.getOrNull()
+        }
     }
 
     /** Run [block] and turn failures into a readable message instead of a crash. */
-    fun launch(onDone: (() -> Unit)? = null, block: suspend () -> Unit): Job = scope.launch {
+    fun launch(onDone: (() -> Unit)? = null, onError: ((String) -> Unit)? = null, block: suspend () -> Unit): Job = scope.launch {
         try {
             block()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            say(explain(e))
+            val text = explain(e)
+            onError?.invoke(text)
+            say(text, error = true)
             if (e is ApiError && e.status == 401) signOut()
         } finally {
             onDone?.invoke()
@@ -49,7 +67,8 @@ class App(context: Context, val scope: CoroutineScope) {
     }
 
     fun explain(e: Throwable): String = when (e) {
-        is ApiError -> e.message
+        // FastAPI's own 404 (no such address) means the server is older than this app.
+        is ApiError -> if (e.status == 404 && e.message == "Not Found") OUTDATED.also { checkServer() } else e.message
         is IOException -> "Can't reach the McXus server. Check Wi-Fi and the server address in Me › Server."
         is CryptoException.Failed -> "Encryption error: ${e.reason}"
         else -> e.message ?: "Something went wrong"
@@ -60,22 +79,55 @@ class App(context: Context, val scope: CoroutineScope) {
         session.userId = userId
         signedIn = true
         startChat()
+        usedNow() // signing in on this device means it is the one in use
     }
 
+    /** Which chat is on screen (no notification for it) and whether McXus is in front. */
+    var openChat: String? = null
+    var inForeground = false
+
+    private val chatMutex = kotlinx.coroutines.sync.Mutex()
+
     fun startChat() {
-        val user = session.userId ?: return
-        if (chat != null) return
-        launch {
-            chat = ChatEngine.create(appContext, api, user).also { it.start() }
-        }
+        if (session.userId == null || chat != null) return
+        launch { ensureChat() }
+    }
+
+    /** The running chat engine, starting it if needed (also used when a push wakes a closed app). */
+    suspend fun ensureChat(): ChatEngine? = chatMutex.withLock {
+        chat?.let { return@withLock it }
+        val user = session.userId ?: return@withLock null
+        checkServer()
+        val engine = ChatEngine.create(appContext, api, user)
+        chat = engine
+        engine.start()
+        scope.launch { engine.incoming.collect { Notifier.show(appContext, this@App, engine, it) } }
+        Push.register(appContext) { token -> scope.launch { runCatching { engine.registerPushToken(token) } } }
+        engine
+    }
+
+    private var activatedAt = 0L
+
+    /** The person is using this device (app opened or touched); at most once a minute. See [ChatEngine.activate]. */
+    fun usedNow() {
+        val now = System.currentTimeMillis()
+        if (!signedIn || now - activatedAt < 60_000) return
+        activatedAt = now
+        launch { ensureChat()?.activate() }
     }
 
     fun signOut() {
+        activatedAt = 0L
+        chat?.let { engine -> scope.launch { runCatching { engine.registerPushToken(null) } } }
         chat?.stop()
         chat = null
         session.signOut()
         signedIn = false
     }
 }
+
+const val MIN_SERVER_LEVEL = 5
+const val ERROR = "error"
+const val OUTDATED = "The McXus server is older than this app. On the laptop run the task \"McXus: start backend\" (it rebuilds the server), then try again."
 
 val LocalApp = staticCompositionLocalOf<App> { error("App not provided") }

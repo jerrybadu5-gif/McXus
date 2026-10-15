@@ -4,6 +4,13 @@
   "version": "2.0.0",
   "inputs": [
     {
+      "id": "device",
+      "type": "pickString",
+      "description": "Which device? (all = every connected phone and emulator)",
+      "options": ["all", "phone", "emulator"],
+      "default": "all"
+    },
+    {
       "id": "server",
       "type": "promptString",
       "description": "Server for the phone chat test: 'usb' = this laptop over the USB cable, a URL like http://192.168.1.20:8000, or empty to skip",
@@ -50,14 +57,14 @@
     {
       "label": "Android: install & open on phone (USB)",
       "type": "shell",
-      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ${workspaceFolder}/scripts/phone.ps1 install",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ${workspaceFolder}/scripts/phone.ps1 install -Device ${input:device}",
       "group": { "kind": "build", "isDefault": true },
       "problemMatcher": []
     },
     {
       "label": "Android: smoke test on phone (USB)",
       "type": "shell",
-      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ${workspaceFolder}/scripts/phone.ps1 test -Server '${input:server}'",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ${workspaceFolder}/scripts/phone.ps1 test -Server '${input:server}' -Device ${input:device}",
       "group": { "kind": "test", "isDefault": true },
       "problemMatcher": []
     },
@@ -70,7 +77,7 @@
     {
       "label": "Android: live log from phone",
       "type": "shell",
-      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ${workspaceFolder}/scripts/phone.ps1 log",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ${workspaceFolder}/scripts/phone.ps1 log -Device ${input:device}",
       "isBackground": true,
       "problemMatcher": []
     },

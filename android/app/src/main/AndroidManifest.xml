@@ -5,12 +5,25 @@
     <!-- Only when the person taps "Use my current location" (meet-up point, delivery place, share in chat). -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- Voice notes (asked when the person first taps the microphone). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Android 13+: new-message notifications. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Only needed on Android 8-9 to save a camera photo before uploading it. -->
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
 
+    <!-- Android 11+: let "Directions" find the phone's maps apps (Google Maps, OsmAnd, Maps.me…). -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="geo" />
+        </intent>
+    </queries>
+
     <application
+        android:name=".McXusApp"
         android:allowBackup="false"
         android:fullBackupContent="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -22,11 +35,30 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <!-- Content-free push from Firebase: wakes McXus to fetch and decrypt new messages. -->
+        <service
+            android:name=".McXusMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
     </application>
 </manifest>

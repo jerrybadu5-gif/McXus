@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -42,6 +43,7 @@ import pg.mcxus.app.LocalApp
 import pg.mcxus.app.Routes
 import pg.mcxus.app.back
 import pg.mcxus.app.ui.BigButton
+import pg.mcxus.app.ui.ErrorBubble
 import pg.mcxus.app.ui.Field
 import pg.mcxus.app.ui.Header
 import pg.mcxus.app.ui.Ic
@@ -75,6 +77,7 @@ fun SellScreen(nav: NavHostController) {
     var busy by remember { mutableStateOf(false) }
     var created by remember { mutableStateOf<String?>(null) }
     var meetPoint by remember { mutableStateOf(Place()) }
+    var formError by remember { mutableStateOf<String?>(null) }
 
     val categories = rememberLoader(Unit) {
         app.api.list("/v1/categories").objects().flatMap { parent ->
@@ -136,21 +139,26 @@ fun SellScreen(nav: NavHostController) {
             Box(Modifier.height(4.dp))
         }
         if (created == null) {
-            BigButton(
-                "Post listing", busy = busy,
-                modifier = Modifier.navigationBarsPadding().padding(16.dp),
-                onClick = {
-                    val amount = Format.amount(price)
-                    when {
-                        title.trim().length < 3 -> app.say("Please write a title (3 letters or more)")
-                        amount == null -> app.say("Please enter a price like 120 or 12.50")
-                        category == null -> app.say("Please choose a category")
-                        province == null -> app.say("Please choose a province")
-                        delivery.any { it == "meetup" || it == "pickup" } && meetPoint.isEmpty ->
-                            app.say("Set the meet-up point: use your location or the map, and add a landmark")
-                        else -> {
+            Column(Modifier.navigationBarsPadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Problems show right here, next to the button (and above the keyboard), not only as a toast.
+                formError?.let { ErrorBubble(it) { formError = null } }
+                BigButton(
+                    "Post listing", busy = busy, modifier = Modifier.testTag("post-listing"),
+                    onClick = {
+                        val amount = Format.amount(price)
+                        formError = when {
+                            title.trim().length < 3 -> "Write a title (3 letters or more)."
+                            amount == null -> "Enter a price like 120 or 12.50."
+                            category == null -> "Choose a category."
+                            province == null -> "Choose a province."
+                            delivery.any { it == "meetup" || it == "pickup" } && meetPoint.isEmpty ->
+                                "Set the meet-up point (your location fills in automatically when allowed)."
+                            meetPoint.hasPoint && !meetPoint.inPng -> "The meet-up point must be in Papua New Guinea."
+                            else -> null
+                        }
+                        if (formError == null) {
                             busy = true
-                            app.launch(onDone = { busy = false }) {
+                            app.launch(onDone = { busy = false }, onError = { formError = it }) {
                                 val body = JSONObject()
                                     .put("title", title.trim()).put("description", description.trim())
                                     .put("category_id", category!!.id).put("price", amount)
@@ -165,9 +173,9 @@ fun SellScreen(nav: NavHostController) {
                                 created = app.api.post("/v1/listings", body).getString("id")
                             }
                         }
-                    }
-                },
-            )
+                    },
+                )
+            }
         }
     }
 }

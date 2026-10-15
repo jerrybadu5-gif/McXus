@@ -28,6 +28,11 @@ for ($i = 0; $i -lt 60; $i++) {
 }
 if (-not $ok) { Write-Host "API did not start. See: docker compose logs api" -ForegroundColor Red; Read-Host "Press Enter"; exit 1 }
 
+$level = (Invoke-RestMethod http://localhost:8000/health).api_level
+if (-not $level -or $level -lt 5) {
+    Write-Host "The API is an old build (api_level $level). Run:  docker compose build --no-cache api worker; docker compose up -d" -ForegroundColor Red
+} else { Write-Host "     Server api_level $level (matches the app)" -ForegroundColor Green }
+
 Write-Host "3/3  Creating demo users..." -ForegroundColor Cyan
 docker compose exec -T api python -m app.cli seed-demo
 

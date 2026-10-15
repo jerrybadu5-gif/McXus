@@ -45,7 +45,7 @@ object Images {
      * Shrink a picked or camera photo before upload (saves mobile data): longest side about 1600 px,
      * JPEG quality 80, rotated upright. The server strips location data again and resizes to 1280 px.
      */
-    fun prepareUpload(resolver: ContentResolver, uri: Uri, maxPx: Int = 1600): ByteArray {
+    fun prepareUpload(resolver: ContentResolver, uri: Uri, maxPx: Int = 1600, quality: Int = 80): ByteArray {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         resolver.openInputStream(uri).use { BitmapFactory.decodeStream(it, null, bounds) }
         var sample = 1
@@ -67,9 +67,24 @@ object Images {
         val matrix = Matrix().apply { postScale(scale, scale); postRotate(rotation.toFloat()) }
         val upright = Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
         return ByteArrayOutputStream().use { out ->
-            upright.compress(Bitmap.CompressFormat.JPEG, 80, out)
+            upright.compress(Bitmap.CompressFormat.JPEG, quality, out)
             out.toByteArray()
         }
+    }
+
+    /** Width and height of a JPEG without decoding it fully. */
+    fun size(jpeg: ByteArray): Pair<Int, Int> {
+        val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size, o)
+        return o.outWidth to o.outHeight
+    }
+
+    /** A tiny (about 1 KB) blurry preview that travels inside the encrypted message. */
+    fun thumbnail(jpeg: ByteArray, px: Int = 32): ByteArray {
+        val full = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size) ?: return ByteArray(0)
+        val scale = px.toFloat() / maxOf(full.width, full.height)
+        val small = Bitmap.createScaledBitmap(full, maxOf(1, (full.width * scale).toInt()), maxOf(1, (full.height * scale).toInt()), true)
+        return ByteArrayOutputStream().use { out -> small.compress(Bitmap.CompressFormat.JPEG, 50, out); out.toByteArray() }
     }
 
     fun qr(text: String, sizePx: Int): Bitmap {

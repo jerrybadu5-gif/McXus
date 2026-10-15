@@ -93,3 +93,13 @@ API: `POST /v1/devices`, `POST /v1/keys`, `GET /v1/keys/count`, `POST /v1/keys/c
 `listings.latitude/longitude/meetup_address` (seller's public meet-up point) and
 `orders.delivery_method/delivery_latitude/delivery_longitude/delivery_address` (visible to buyer and seller).
 GPS first, landmark second; points must be inside PNG. Changes are logged as order events. See ADR 0009.
+
+## Groups, media and push (M3.2)
+
+`conversations.kind='group'` with `title` and `epoch`; `conversation_members.role` (admin|member);
+`mls_messages.kind` adds `event` (server notice: added/removed/left) and `epoch` on commits; `media_blobs`
+(encrypted chat files in the private `MCXUS_BLOB_DIR`, 30-day expiry); `devices.push_token`.
+API: `POST /v1/groups`, `GET|PUT /v1/groups/{id}`, `POST /v1/groups/{id}/members` (commit + welcome, epoch-checked),
+`POST /v1/groups/{id}/members/remove`, `POST /v1/groups/{id}/leave`, `POST /v1/groups/{id}/role`,
+`POST /v1/conversations/{id}/blobs`, `GET /v1/blobs/{id}`, `POST /v1/devices/{id}/push-token`. Push sender:
+`app/push.py` (FCM HTTP v1, data-only `{"t":"sync"}`). See ADR 0010.

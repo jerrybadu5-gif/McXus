@@ -7,6 +7,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.navigation.compose.rememberNavController
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.MainScope
@@ -34,6 +36,7 @@ import pg.mcxus.app.ui.screens.SellScreen
 import pg.mcxus.app.ui.screens.SignInScreen
 import pg.mcxus.app.ui.theme.McXusTheme
 import java.io.File
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.unit.dp
 import kotlin.random.Random
@@ -121,17 +124,51 @@ class ScreenshotTour {
             withTimeout(30_000) { while (buyer.messages(conv).none { !it.mine }) delay(100) }
             conv to orderId
         }
+        // A group with the seller and a third person, with a photo and a voice note.
+        val ruthSession = Session(context, "tour-ruth")
+        val ruthId = signUp(ruthSession, "Mama Ruth")
+        val ruth = runBlocking { ChatEngine.create(context, Api(ruthSession), ruthId).also { it.start() } }
+        val group = runBlocking {
+            withTimeout(30_000) { while (!ruth.online.value) delay(100) }
+            val buyer = app.chat!!
+            val (g, _) = buyer.createGroup("Eriku Youth Group", listOf(sellerId, ruthId))
+            withTimeout(30_000) {
+                while (seller.ensureReady(g) != pg.mcxus.app.chat.Readiness.Ready || ruth.ensureReady(g) != pg.mcxus.app.chat.Readiness.Ready) delay(200)
+            }
+            seller.send(g, Payload.text("Moning olgeta! Youth meeting Saturday 3pm at the church hall."))
+            val bmp = android.graphics.Bitmap.createBitmap(640, 480, android.graphics.Bitmap.Config.ARGB_8888)
+            android.graphics.Canvas(bmp).apply {
+                drawColor(0xFF134074.toInt())
+                drawCircle(320f, 240f, 150f, android.graphics.Paint().apply { color = 0xFFE9A23B.toInt() })
+            }
+            val jpeg = java.io.ByteArrayOutputStream().use { bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, it); it.toByteArray() }
+            ruth.sendImage(g, jpeg, 640, 480, pg.mcxus.app.util.Images.thumbnail(jpeg), "Poster for Saturday")
+            ruth.sendVoice(g, ByteArray(20_000) { 1 }, 12_400)
+            buyer.send(g, Payload.text("Tenkyu Mama Ruth, I will bring the speakers."))
+            withTimeout(30_000) { while (buyer.messages(g).none { it.payload.contains("voice") }) delay(100) }
+            g
+        }
 
         var screen by mutableStateOf("signin")
         compose.setContent {
             McXusTheme {
-                CompositionLocalProvider(LocalApp provides app) { Screen(screen, conv, listingId, orderId) }
+                CompositionLocalProvider(LocalApp provides app) {
+                    androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) {
+                        Screen(screen, conv, listingId, orderId, group)
+                        MessageHost(app, androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.BottomCenter))
+                    }
+                }
             }
         }
         val dir = File(out!!).apply { mkdirs() }
-        listOf("signin", "chats", "chat", "discover", "market", "listing", "sell", "wallet", "order", "me", "place", "map").forEachIndexed { i, name ->
-            screen = name
+        listOf("signin", "chats", "chat", "discover", "market", "listing", "sell", "wallet", "order", "me", "place", "map", "group-chat", "group-info", "new-group", "sell-error", "error-toast").forEachIndexed { i, name ->
+            screen = if (name == "sell-error") "sell" else if (name == "error-toast") "market" else name
             compose.waitForIdle()
+            if (name == "sell-error") {
+                Thread.sleep(1500)
+                compose.onNodeWithTag("post-listing", useUnmergedTree = true).performClick()
+            }
+            if (name == "error-toast") app.say(pg.mcxus.app.OUTDATED, error = true)
             Thread.sleep(2500) // let network loads finish
             compose.waitForIdle()
             val view = compose.activity.window.decorView
@@ -140,11 +177,12 @@ class ScreenshotTour {
             File(dir, "%02d-%s.png".format(i + 1, name)).outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
         }
         seller.stop()
+        ruth.stop()
         app.chat?.stop()
     }
 
     @Composable
-    private fun Screen(name: String, conv: String, listingId: String, orderId: String) {
+    private fun Screen(name: String, conv: String, listingId: String, orderId: String, group: String) {
         val nav = rememberNavController()
         when (name) {
             "signin" -> SignInScreen(onDone = {})
@@ -160,6 +198,9 @@ class ScreenshotTour {
             "place" -> androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.padding(16.dp)) {
                 pg.mcxus.app.ui.PlaceField("Meet-up / pickup point", pg.mcxus.app.util.Place.of(-6.729, 146.997, "Eriku market gate"), {})
             }
+            "group-chat" -> ChatScreen(nav, group)
+            "group-info" -> pg.mcxus.app.ui.screens.GroupInfoScreen(nav, group)
+            "new-group" -> pg.mcxus.app.ui.screens.NewGroupScreen(nav)
             "map" -> pg.mcxus.app.ui.MapPicker(pg.mcxus.app.util.Place.of(-6.729, 146.997), {}, { _, _ -> })
         }
     }

@@ -205,7 +205,7 @@ fun ListingScreen(nav: NavHostController, listingId: String) {
                 LineButton("My orders", { nav.navigate(Routes.ORDERS) }, Modifier.weight(1f))
             } else {
                 LineButton("Chat", modifier = Modifier.testTag("listing-chat"), enabled = !busy, onClick = {
-                    val engine = app.chat ?: return@LineButton app.say("Encryption is still starting, try again in a second.")
+                    val engine = app.chat ?: return@LineButton app.say("Encryption is still starting, try again in a second.", error = true)
                     busy = true
                     app.launch(onDone = { busy = false }) {
                         val conv = engine.open(seller.str("id"), listingId)
@@ -312,8 +312,8 @@ private fun BuyDialog(item: JSONObject, onDismiss: () -> Unit, onConfirm: (Int, 
                 BigButton("Pay ${Format.kina(total)}", modifier = Modifier.weight(1.4f).testTag("confirm-buy"), onClick = {
                     val needsPlace = toBuyer || sellerPoint == null && method == "meetup"
                     when {
-                        needsPlace && place.isEmpty -> app.say(if (toBuyer) "Set where to deliver: your location, the map, or an address" else "Suggest where to meet")
-                        place.hasPoint && !place.inPng -> app.say("That point is outside Papua New Guinea")
+                        needsPlace && place.isEmpty -> app.say(if (toBuyer) "Set where to deliver: your location, the map, or an address" else "Suggest where to meet", error = true)
+                        place.hasPoint && !place.inPng -> app.say("That point is outside Papua New Guinea", error = true)
                         else -> {
                             val delivery = JSONObject().put("method", method)
                             if (!place.isEmpty) {

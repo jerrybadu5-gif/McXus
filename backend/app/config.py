@@ -60,6 +60,11 @@ class Settings(BaseSettings):
     # Messaging (M3)
     message_ttl_days: int = 30  # encrypted messages waiting for an offline phone are deleted after this
     max_message_bytes: int = 64 * 1024
+    max_group_members: int = 256
+    blob_dir: str = "blobs"  # encrypted chat photos/voice notes; private (never served as static files)
+    max_blob_bytes: int = 5 * 1024 * 1024
+    # Firebase Cloud Messaging (content-free "you have mail" pushes). Empty = pushes off.
+    fcm_credentials_file: str = ""  # service-account JSON from the Firebase console
     max_key_packages_per_device: int = 100
     sync_max_wait_seconds: int = 25  # long-poll: how long /messages/sync waits for something new
 

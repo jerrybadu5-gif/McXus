@@ -86,6 +86,19 @@ fun Avatar(name: String, size: Dp = 50.dp, ring: Color? = null, key: String = na
     }
 }
 
+/** Round avatar for a chat: a person's initials, or the group icon on navy. */
+@Composable
+fun ChatAvatar(c: pg.mcxus.app.chat.Conversation, size: Dp = 50.dp, ring: Color? = null) {
+    if (!c.isGroup) {
+        Avatar(c.name, size, ring, key = c.avatarKey)
+        return
+    }
+    val inner = Modifier.size(size).clip(CircleShape).background(Mx.Navy)
+    Box(if (ring != null) inner.border(2.dp, ring, CircleShape) else inner, contentAlignment = Alignment.Center) {
+        Icon(Ic.Group, contentDescription = null, tint = Mx.Gold, modifier = Modifier.size(size * 0.5f))
+    }
+}
+
 @Composable
 fun Tag(text: String, bg: Color = Mx.GoldSoft, fg: Color = Mx.GoldInk) {
     Text(
@@ -265,5 +278,34 @@ fun StarsAmount(amount: String, big: Boolean = false) {
         Text(Format.kina(amount), color = Mx.Blue, fontWeight = FontWeight.ExtraBold, fontSize = if (big) 28.sp else 15.sp)
         Text(" · ${amount.removeSuffix(".00")} Stars", color = Mx.Muted, fontWeight = FontWeight.SemiBold, fontSize = if (big) 14.sp else 12.sp,
             modifier = Modifier.padding(bottom = if (big) 4.dp else 1.dp))
+    }
+}
+
+/** A red message bubble shown where the problem is (e.g. above a form's button). Tap to dismiss. */
+@Composable
+fun ErrorBubble(text: String, onDismiss: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0xFFFDE2E1))
+            .border(1.dp, Mx.Red.copy(alpha = 0.4f), RoundedCornerShape(14.dp)).clickable(onClick = onDismiss)
+            .padding(horizontal = 12.dp, vertical = 10.dp).testTag("form-error"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text("⚠", color = Mx.Red, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        Text(text, color = Color(0xFF7A1A14), fontSize = 14.sp, lineHeight = 19.sp, modifier = Modifier.weight(1f))
+    }
+}
+
+/** Shown on the main tabs when the server is older than this app. */
+@Composable
+fun ServerOutdatedBanner() {
+    val app = LocalApp.current
+    if (!app.serverOutdated) return
+    Row(
+        Modifier.fillMaxWidth().background(Mx.Red).statusBarsPadding().padding(horizontal = 14.dp, vertical = 10.dp).testTag("server-outdated"),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(pg.mcxus.app.OUTDATED, color = Color.White, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.weight(1f))
+        Text("Retry", color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { app.checkServer() }.padding(8.dp))
     }
 }

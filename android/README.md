@@ -1,4 +1,4 @@
-# McXus Android app (0.3.0-m3)
+# McXus Android app (0.4.0-m3.2)
 
 Native Kotlin + Jetpack Compose (Material 3), McXus design: deep Pacific blue, kina gold, Plus Jakarta Sans.
 Android 8.0+ (minSdk 26), targets Android 15 (API 35). **Sandbox: test Stars only.**
@@ -6,6 +6,11 @@ Android 8.0+ (minSdk 26), targets Android 15 (API 35). **Sandbox: test Stars onl
 ## What it does
 - **Chats** — end-to-end encrypted one-to-one chats (OpenMLS, ADR 0008): start by phone number or **Chat** on a
   listing; listing cards and live escrow order cards inside the chat; unread counts; safety number (⋮ menu).
+- **Groups** — up to 256 people; admins add/remove members and make other admins; leave anytime; sender names
+  in colour; join/leave notices. Encrypted like 1:1 chats (MLS; ADR 0010).
+- **Photos & voice notes** — + → Photo / Take a photo, or tap the microphone. Encrypted on the phone before upload.
+- **Notifications** — when McXus is closed, if Firebase is set up (docs/FIREBASE-PUSH.md). The push itself carries
+  no content; Me › Notifications can hide message text.
 - **Discover** — feed of new listings with seller stories (posts, follows and Shorts videos arrive in M5).
 - **Market** — search, categories, province filter, listing pages with photo pager, **Buy with Stars**
   (first buyer to pay gets it); the order card is sent to the seller in the encrypted chat.
@@ -30,6 +35,9 @@ then restart VS Code. Phone: Developer options → **USB debugging ON**, plug in
 | Android: smoke test on phone (USB) | `.\scripts\phone.ps1 test` |
 | Android: live log from phone | `.\scripts\phone.ps1 log` |
 | Android: unit tests (laptop) | `cd android; .\gradlew.bat testDebugUnitTest lintDebug` |
+
+**Phone and emulator together:** every connected device is used (installed, linked, opened). To pick one, the
+tasks ask *all / phone / emulator*, or in PowerShell add `-Device phone`, `-Device emulator` or `-Device <serial>`.
 
 **Server over the USB cable:** the install/test tasks run `adb reverse tcp:8000 tcp:8000`, so in the app the
 server is simply `http://127.0.0.1:8000` while the cable is plugged in (no Wi-Fi needed). On Wi-Fi instead, use

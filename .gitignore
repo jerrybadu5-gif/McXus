@@ -21,3 +21,9 @@ android/local.properties
 # Rust (encryption library)
 crypto/target/
 .idea/
+
+# Secrets (Firebase service-account key, google-services.json)
+secrets/*
+!secrets/README.txt
+android/app/google-services.json
+blobs/
