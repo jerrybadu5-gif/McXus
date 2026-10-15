@@ -43,8 +43,8 @@ async def security_headers(request: Request, call_next):  # type: ignore[no-unty
 
 
 # Raised whenever the app needs new server features, so an old server is reported clearly instead of "Not Found".
-# 1 = M1-M2, 2 = M3 chat, 3 = M3.1 places, 4 = M3.2 groups/media/push.
-API_LEVEL = 4
+# 1 = M1-M2, 2 = M3 chat, 3 = M3.1 places, 4 = M3.2 groups/media/push, 5 = one device per account holds the keys.
+API_LEVEL = 5
 
 
 @app.get("/health", tags=["health"])

@@ -53,9 +53,24 @@ def register_device(db: Session, user: User, name: str) -> Device:
     """Register this phone. M3 supports one active device per user: unused KeyPackages of earlier devices (for
     example before a reinstall, whose keys are gone) are deleted so nobody starts a chat the user cannot read."""
     db.execute(delete(KeyPackage).where(KeyPackage.user_id == user.id, KeyPackage.claimed_at.is_(None)))
-    device = Device(id=uuid.uuid4(), user_id=user.id, name=name[:60], last_seen_at=clock.now())
+    device = Device(
+        id=uuid.uuid4(), user_id=user.id, name=name[:60], last_seen_at=clock.now(), activated_at=clock.now()
+    )
     db.add(device)
     db.flush()
+    return device
+
+
+def activate_device(db: Session, user: User, device_id: uuid.UUID) -> Device:
+    """The account was opened on this device: new chats are set up here from now on. Unused KeyPackages of the
+    account's other devices are removed so nobody encrypts a new chat for a device the person is not using."""
+    device = own_device(db, user, device_id)
+    device.activated_at = clock.now()
+    db.execute(
+        delete(KeyPackage).where(
+            KeyPackage.user_id == user.id, KeyPackage.device_id != device.id, KeyPackage.claimed_at.is_(None)
+        )
+    )
     return device
 
 
@@ -126,10 +141,11 @@ def claim_key_package(
         raise Conflict("Too many tries to set up this chat today; try again tomorrow", code="too_many_claims")
     package = db.scalars(
         select(KeyPackage)
+        .join(Device, Device.id == KeyPackage.device_id)
         .where(KeyPackage.user_id == target_user_id, KeyPackage.claimed_at.is_(None))
-        .order_by(KeyPackage.id)
+        .order_by(Device.activated_at.desc().nulls_last(), KeyPackage.id)
         .limit(1)
-        .with_for_update(skip_locked=True)
+        .with_for_update(of=KeyPackage, skip_locked=True)
     ).first()
     if package is None:
         raise Conflict("This person needs to open McXus once before you can message them", code="no_key_packages")
@@ -198,12 +214,12 @@ def member_conversation(db: Session, user: User, conversation_id: uuid.UUID) -> 
 def conversations_for(db: Session, user: User) -> list[dict[str, Any]]:
     """My chats, newest activity first. Direct chats carry the other person; groups their size and my role."""
     mine = db.execute(
-        select(Conversation, ConversationMember.role)
+        select(Conversation, ConversationMember.role, ConversationMember.key_device_id)
         .join(ConversationMember, ConversationMember.conversation_id == Conversation.id)
         .where(ConversationMember.user_id == user.id)
         .order_by(func.coalesce(Conversation.last_message_at, Conversation.created_at).desc())
     ).all()
-    ids = [c.id for c, _ in mine]
+    ids = [c.id for c, _, _ in mine]
     others: dict[uuid.UUID, list[uuid.UUID]] = {}
     for conv_id, member in db.execute(
         select(ConversationMember.conversation_id, ConversationMember.user_id).where(
@@ -212,7 +228,7 @@ def conversations_for(db: Session, user: User) -> list[dict[str, Any]]:
     ):
         others.setdefault(conv_id, []).append(member)
     rows = []
-    for c, role in mine:
+    for c, role, key_device in mine:
         peers = others.get(c.id, [])
         rows.append(
             {
@@ -220,6 +236,7 @@ def conversations_for(db: Session, user: User) -> list[dict[str, Any]]:
                 "peer_id": peers[0] if c.kind == "direct" and peers else None,
                 "member_count": len(peers) + 1,
                 "role": role,
+                "key_device_id": key_device,
             }
         )
     return rows
@@ -257,8 +274,29 @@ def _store(
     return message
 
 
+def _recipient_device(db: Session, user_id: uuid.UUID, device_id: uuid.UUID | None) -> uuid.UUID | None:
+    if device_id is None:
+        return None
+    device = db.get(Device, device_id)
+    if device is None or device.user_id != user_id:
+        raise AppError("That device does not belong to that person", code="invalid_device")
+    return device.id
+
+
+def _set_key_device(db: Session, conversation_id: uuid.UUID, user_id: uuid.UUID, device_id: uuid.UUID | None) -> None:
+    member = db.get(ConversationMember, (conversation_id, user_id))
+    if member is not None and device_id is not None:
+        member.key_device_id = device_id
+
+
 def post_welcome(
-    db: Session, user: User, device_id: uuid.UUID, conversation_id: uuid.UUID, recipient_id: uuid.UUID, payload_b64: str
+    db: Session,
+    user: User,
+    device_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    recipient_id: uuid.UUID,
+    payload_b64: str,
+    recipient_device_id: uuid.UUID | None = None,
 ) -> MlsMessage:
     device = own_device(db, user, device_id)
     conversation = member_conversation(db, user, conversation_id)
@@ -279,7 +317,12 @@ def post_welcome(
             "The other phone already set up encryption for this chat; wait for its Welcome", code="already_initialised"
         )
     db.refresh(conversation)
-    return _store(db, user, device, conversation, "welcome", decode_payload(payload_b64), recipient_id)
+    target_device = _recipient_device(db, recipient_id, recipient_device_id)
+    _set_key_device(db, conversation.id, user.id, device.id)
+    _set_key_device(db, conversation.id, recipient_id, target_device)
+    message = _store(db, user, device, conversation, "welcome", decode_payload(payload_b64), recipient_id)
+    message.recipient_device_id = target_device
+    return message
 
 
 def post_message(
@@ -294,27 +337,35 @@ def post_message(
     return _store(db, user, device, conversation, kind, decode_payload(payload_b64))
 
 
-def _visible(user: User, after: int):  # type: ignore[no-untyped-def]
+def _visible(user: User, after: int, device_id: uuid.UUID | None = None):  # type: ignore[no-untyped-def]
     mine = select(ConversationMember.conversation_id).where(ConversationMember.user_id == user.id)
+    # A Welcome is for one person and, when the sender named it, for one of their devices only.
+    my_welcome = MlsMessage.recipient_user_id == user.id
+    if device_id is not None:
+        my_welcome = my_welcome & (
+            MlsMessage.recipient_device_id.is_(None) | (MlsMessage.recipient_device_id == device_id)
+        )
     return (
         select(MlsMessage)
         .where(
             MlsMessage.id > after,
             MlsMessage.conversation_id.in_(mine),
             MlsMessage.expires_at > clock.now(),
-            or_(MlsMessage.kind != "welcome", MlsMessage.recipient_user_id == user.id),
+            or_(MlsMessage.kind != "welcome", my_welcome),
         )
         .order_by(MlsMessage.id)
     )
 
 
-def sync(db: Session, user: User, after: int, limit: int, wait: int, sleep=time.sleep) -> list[MlsMessage]:  # type: ignore[no-untyped-def]
+def sync(  # type: ignore[no-untyped-def]
+    db: Session, user: User, after: int, limit: int, wait: int, sleep=time.sleep, device_id: uuid.UUID | None = None
+) -> list[MlsMessage]:
     """Messages after the cursor, oldest first. With `wait`, holds the request until something arrives (or
     the wait ends) so phones get messages quickly without push notifications."""
     wait = max(0, min(wait, get_settings().sync_max_wait_seconds))
     deadline = time.monotonic() + wait
     while True:
-        rows = list(db.scalars(_visible(user, after).limit(limit)))
+        rows = list(db.scalars(_visible(user, after, device_id).limit(limit)))
         if rows or time.monotonic() >= deadline:
             return rows
         db.rollback()  # end the snapshot so the next look sees new rows
@@ -354,7 +405,7 @@ def _event(db: Session, user: User, device: Device | None, group: Conversation, 
     return _store(db, user, sender_device, group, "event", json.dumps(data).encode())
 
 
-def create_group(db: Session, user: User, title: str) -> Conversation:
+def create_group(db: Session, user: User, title: str, device_id: uuid.UUID | None = None) -> Conversation:
     """Create an empty group with me as admin. My phone creates the MLS group locally at epoch 0, then adds
     people with add_members."""
     title = title.strip()
@@ -364,7 +415,12 @@ def create_group(db: Session, user: User, title: str) -> Conversation:
     group = Conversation(id=uuid.uuid4(), kind="group", created_by=user.id, title=title, mls_ready_by=user.id, epoch=0)
     db.add(group)
     db.flush()
-    db.add(ConversationMember(conversation_id=group.id, user_id=user.id, role="admin", created_at=clock.now()))
+    key_device = own_device(db, user, device_id).id if device_id else None
+    db.add(
+        ConversationMember(
+            conversation_id=group.id, user_id=user.id, role="admin", key_device_id=key_device, created_at=clock.now()
+        )
+    )
     db.flush()
     return group
 
@@ -396,6 +452,7 @@ def add_members(
     epoch: int,
     commit_b64: str,
     welcome_b64: str,
+    devices: dict[uuid.UUID, uuid.UUID] | None = None,
 ) -> tuple[MlsMessage, list[MlsMessage]]:
     """Returns the stored commit and one Welcome per new member."""
     device = own_device(db, user, device_id)
@@ -414,9 +471,19 @@ def add_members(
     commit, welcome = decode_payload(commit_b64), decode_payload(welcome_b64)
     _accept_change(group, epoch)
     welcomes = []
+    me = db.get(ConversationMember, (group.id, user.id))
+    if me is not None and me.key_device_id is None:
+        me.key_device_id = device.id  # the admin's keys live on the phone making the change
     for uid in new:  # Welcomes first: a new member joins before it sees the change that added it
-        db.add(ConversationMember(conversation_id=group.id, user_id=uid, role="member", created_at=clock.now()))
-        welcomes.append(_store(db, user, device, group, "welcome", welcome, recipient=uid))
+        target = _recipient_device(db, uid, (devices or {}).get(uid))
+        db.add(
+            ConversationMember(
+                conversation_id=group.id, user_id=uid, role="member", key_device_id=target, created_at=clock.now()
+            )
+        )
+        welcome_row = _store(db, user, device, group, "welcome", welcome, recipient=uid)
+        welcome_row.recipient_device_id = target
+        welcomes.append(welcome_row)
     message = _store(db, user, device, group, "commit", commit, epoch=epoch)
     _event(db, user, device, group, {"type": "added", "by": str(user.id), "users": [str(u) for u in new]})
     return message, welcomes

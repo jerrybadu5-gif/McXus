@@ -68,6 +68,7 @@ class ConversationOut(BaseModel):
     title: str | None = Field(default=None, description="Groups: the group name")
     member_count: int = 2
     my_role: str = "member"
+    keys_device_id: uuid.UUID | None = Field(default=None, description="Which of my devices holds this chat's keys")
     listing_id: uuid.UUID | None
     encryption_ready: bool
     started_by_me: bool
@@ -78,6 +79,9 @@ class ConversationOut(BaseModel):
 class WelcomeIn(BaseModel):
     device_id: uuid.UUID
     recipient_user_id: uuid.UUID
+    recipient_device_id: uuid.UUID | None = Field(
+        default=None, description="The device the claimed KeyPackage came from"
+    )
     payload: B64
 
 
@@ -153,6 +157,7 @@ def _out(db: Session, user: User, rows: list[dict]) -> list[ConversationOut]:  #
             title=r["conversation"].title,
             member_count=r.get("member_count", 2),
             my_role=r.get("role", "member"),
+            keys_device_id=r.get("key_device_id"),
             listing_id=r["conversation"].listing_id,
             encryption_ready=r["conversation"].mls_ready_by is not None,
             started_by_me=r["conversation"].mls_ready_by == user.id,
@@ -195,7 +200,9 @@ def list_conversations(user: Me, db: DB) -> list[ConversationOut]:
 
 @router.post("/conversations/{conversation_id}/welcome", status_code=201)
 def welcome(conversation_id: uuid.UUID, body: WelcomeIn, user: Me, db: DB, bg: BackgroundTasks) -> MessageOut:
-    message = chat.post_welcome(db, user, body.device_id, conversation_id, body.recipient_user_id, body.payload)
+    message = chat.post_welcome(
+        db, user, body.device_id, conversation_id, body.recipient_user_id, body.payload, body.recipient_device_id
+    )
     db.commit()
     _wake(bg, db, message)
     return _message(message)
@@ -216,9 +223,19 @@ def sync(
     after: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=500)] = 200,
     wait: Annotated[int, Query(ge=0, le=60)] = 0,
+    device_id: uuid.UUID | None = None,
 ) -> list[MessageOut]:
-    """New messages for all my chats after `after` (a message id). `wait` (seconds) long-polls."""
-    return [_message(m) for m in chat.sync(db, user, after, limit, wait)]
+    """New messages for all my chats after `after` (a message id). `wait` (seconds) long-polls. With `device_id`,
+    Welcomes meant for my other devices are left out."""
+    return [_message(m) for m in chat.sync(db, user, after, limit, wait, device_id=device_id)]
+
+
+@router.post("/devices/{device_id}/activate", status_code=204)
+def activate(device_id: uuid.UUID, user: Me, db: DB) -> Response:
+    """The account was opened on this device: set up new chats here (one device per account for now)."""
+    chat.activate_device(db, user, device_id)
+    db.commit()
+    return Response(status_code=204)
 
 
 # ---------- push ----------
@@ -240,6 +257,7 @@ def push_token(device_id: uuid.UUID, body: PushTokenIn, user: Me, db: DB) -> Res
 
 class GroupIn(BaseModel):
     title: str = Field(min_length=1, max_length=80, examples=["Eriku Youth Group"])
+    device_id: uuid.UUID | None = Field(default=None, description="The creator's device (holds the group's keys)")
 
 
 class MemberOut(BaseModel):
@@ -260,6 +278,7 @@ class AddMembersIn(BaseModel):
     epoch: int = Field(ge=0, description="The group epoch the commit was made in")
     commit: B64
     welcome: B64
+    devices: dict[uuid.UUID, uuid.UUID] = Field(default={}, description="user id -> device of the claimed KeyPackage")
 
 
 class RemoveMembersIn(BaseModel):
@@ -290,7 +309,7 @@ def _group_out(db: Session, user: User, group_id: uuid.UUID) -> GroupOut:
 def create_group(body: GroupIn, user: Me, db: DB) -> ConversationOut:
     """Create a group with me as admin; then add people (claim their KeyPackages with group_id, then
     POST /groups/{id}/members)."""
-    group = chat.create_group(db, user, body.title)
+    group = chat.create_group(db, user, body.title, body.device_id)
     db.commit()
     return _out(db, user, [{"conversation": group, "peer_id": None, "member_count": 1, "role": "admin"}])[0]
 
@@ -312,7 +331,7 @@ def add_members(group_id: uuid.UUID, body: AddMembersIn, user: Me, db: DB, bg: B
     """Admin adds people: the MLS Commit (for current members) and Welcome (for the new ones). Refused with
     409 stale_epoch if the group changed since the commit was made."""
     message, welcomes = chat.add_members(
-        db, user, body.device_id, group_id, body.user_ids, body.epoch, body.commit, body.welcome
+        db, user, body.device_id, group_id, body.user_ids, body.epoch, body.commit, body.welcome, body.devices
     )
     db.commit()
     _wake(bg, db, message, *welcomes)

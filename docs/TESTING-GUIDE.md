@@ -171,3 +171,4 @@ Use two phones, or one phone plus the laptop emulator. Push needs the Firebase s
 | G9 | Close McXus on phone A; send it a message from phone B | notification on A within seconds: name + text (lock screen: "New message") |
 | G10 | Me → **Notifications** → Hide text, repeat G9 | notification says only "New message" |
 | G11 | Try to send a 10-minute voice note | recording stops at 5 minutes |
+| G12 | Open the demo buyer on the emulator, then on the phone (the phone is now the active device). From the other account, make a group with the demo buyer and send a message | the phone reads it; the emulator shows one grey note "This chat is set up on your other device…", never "could not be decrypted" |

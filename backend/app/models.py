@@ -406,6 +406,8 @@ class Device(TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(60), default="")
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     push_token: Mapped[str | None] = mapped_column(String(512))  # Firebase token; pushes carry no content
+    # When the account was last opened on this device. New chats are set up on the most recently opened device.
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class KeyPackage(TimestampMixin, Base):
@@ -444,6 +446,8 @@ class ConversationMember(TimestampMixin, Base):
     conversation_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("conversations.id"), primary_key=True)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), primary_key=True)
     role: Mapped[str] = mapped_column(String(8), default="member", server_default="member")  # admin | member
+    # The device of this member that holds the chat's encryption keys (one device per account for now).
+    key_device_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("devices.id"))
 
 
 class MlsMessage(TimestampMixin, Base):
@@ -462,6 +466,9 @@ class MlsMessage(TimestampMixin, Base):
     sender_device_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("devices.id"))
     kind: Mapped[str] = mapped_column(String(12))
     recipient_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))  # Welcomes only
+    recipient_device_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("devices.id")
+    )  # Welcomes: only this device
     payload: Mapped[bytes] = mapped_column(LargeBinary)
     epoch: Mapped[int | None] = mapped_column(Integer)  # commits: the group epoch the change was made in
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

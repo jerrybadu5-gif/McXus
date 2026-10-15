@@ -245,3 +245,34 @@ def test_groups_over_http(client, db, tmp_path, monkeypatch):
     assert client.post(f"/v1/groups/{group['id']}/leave", headers=h_b).status_code == 204
     assert client.get("/v1/conversations", headers=h_b).json() == []
     assert db.query(MlsMessage).filter_by(kind="event").count() == 2
+
+
+def test_one_device_per_account_holds_the_keys(db, church):
+    admin, a_dev, bob, b_phone, cara, _, group = church
+    # Bob opens McXus on a second device (the emulator): it becomes the device in use.
+    b_emulator = chat.register_device(db, bob, "Emulator")
+    chat.upload_key_packages(db, bob, b_emulator.id, [b64(b"emu-kp")])
+    db.commit()
+    kp = chat.claim_key_package(db, admin, bob.id, group.id)
+    assert kp.device_id == b_emulator.id  # new chats are set up on the device in use
+    chat.add_members(db, admin, a_dev.id, group.id, [bob.id], 0, b64(b"c"), b64(b"w"), {bob.id: kp.device_id})
+    db.commit()
+    # Only the emulator receives the Welcome; the phone is not asked to open something it cannot.
+    assert [m.kind for m in chat.sync(db, bob, 0, 100, 0, device_id=b_emulator.id)][0] == "welcome"
+    assert "welcome" not in [m.kind for m in chat.sync(db, bob, 0, 100, 0, device_id=b_phone.id)]
+    rows = {r["conversation"].id: r for r in chat.conversations_for(db, bob)}
+    assert rows[group.id]["key_device_id"] == b_emulator.id
+    assert {r["conversation"].id: r for r in chat.conversations_for(db, admin)}[group.id]["key_device_id"] == a_dev.id
+    # Back on the phone: it becomes active and the emulator's unused KeyPackages are retired.
+    chat.upload_key_packages(db, bob, b_emulator.id, [b64(b"emu-kp-2")])
+    chat.activate_device(db, bob, b_phone.id)
+    db.commit()
+    assert chat.unclaimed_count(db, b_emulator.id) == 0
+    chat.upload_key_packages(db, bob, b_phone.id, [b64(b"phone-kp-new")])  # the app tops up after activating
+    assert (
+        chat.claim_key_package(db, cara, bob.id).device_id == b_phone.id
+        if chat.open_direct(db, cara, bob.id, None)
+        else False
+    )
+    with pytest.raises(AppError, match="does not belong"):
+        chat.add_members(db, admin, a_dev.id, group.id, [cara.id], 1, b64(b"c"), b64(b"w"), {cara.id: b_phone.id})

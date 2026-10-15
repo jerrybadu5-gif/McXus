@@ -43,6 +43,8 @@ data class Conversation(
     val lastPreview: String,
     val lastAt: Long,
     val unread: Int,
+    /** Which of my devices holds this chat's keys (null = not set up yet). */
+    val keysDeviceId: String? = null,
 ) {
     val isGroup: Boolean get() = kind == "group"
     val name: String get() = if (isGroup) title ?: "Group" else peer?.name ?: "Chat"
@@ -137,6 +139,8 @@ class ChatEngine private constructor(
 
     private suspend fun setUp() {
         ensureDevice()
+        // The device opened most recently is the one new chats and groups are set up on (ADR 0010).
+        api.post("/v1/devices/$deviceId/activate")
         topUpKeyPackages()
         refreshConversations()
         _online.value = true
@@ -192,6 +196,7 @@ class ChatEngine private constructor(
                     ?: if (c.optString("kind") == "group") "Group created" else "Tap to start an encrypted chat",
                 lastAt = s?.second ?: parseTime(c.optString("created_at")),
                 unread = s?.third ?: 0,
+                keysDeviceId = if (c.isNull("keys_device_id")) null else c.optString("keys_device_id").ifEmpty { null },
             )
         }.sortedByDescending { it.lastAt }
         _version.value++
@@ -199,7 +204,7 @@ class ChatEngine private constructor(
 
     private suspend fun syncForever() {
         while (true) {
-            val batch = api.list("/v1/messages/sync?after=$cursor&limit=200&wait=25")
+            val batch = api.list("/v1/messages/sync?after=$cursor&limit=200&wait=25&device_id=$deviceId")
             _online.value = true
             if (batch.length() > 0) process(batch)
         }
@@ -208,7 +213,7 @@ class ChatEngine private constructor(
     /** One quick sync without waiting (used when a push arrives while the app is closed). */
     suspend fun syncOnce() {
         ensureDevice()
-        val batch = api.list("/v1/messages/sync?after=$cursor&limit=200&wait=0")
+        val batch = api.list("/v1/messages/sync?after=$cursor&limit=200&wait=0&device_id=$deviceId")
         if (batch.length() > 0) process(batch)
     }
 
@@ -289,7 +294,11 @@ class ChatEngine private constructor(
                 if (m.getString("sender_device_id") == deviceId) return // my own message: stored when sent
                 val gid = group(conv)
                 if (gid == null) {
-                    store.add(conv, m.getLong("id"), false, Payload.system("A message could not be decrypted (no keys)."), at, false)
+                    // This chat's keys are on my other device (or an earlier install): say so once, not per message.
+                    if (store.get("elsewhere:$conv") == null) {
+                        store.put("elsewhere:$conv", "1")
+                        store.add(conv, null, false, Payload.system(ELSEWHERE), at, false)
+                    }
                     return
                 }
                 try {
@@ -329,6 +338,8 @@ class ChatEngine private constructor(
     /** Make sure this phone can encrypt for [conversationId]; sets a direct chat up the first time. */
     suspend fun ensureReady(conversationId: String): Readiness = lock.withLock {
         val conv = conversation(conversationId) ?: return@withLock Readiness.Failed("Chat not found")
+        val elsewhere = group(conversationId) == null && conv.keysDeviceId != null && conv.keysDeviceId != deviceId
+        if (elsewhere && !isRemoved(conversationId)) return@withLock Readiness.Failed(ELSEWHERE)
         if (conv.isGroup) {
             return@withLock when {
                 isRemoved(conversationId) -> Readiness.Failed("You are no longer in this group.")
@@ -346,7 +357,8 @@ class ChatEngine private constructor(
                 val welcome = mls.createDirect(groupId, Base64.decode(kp.getString("key_package"), Base64.NO_WRAP))
                 api.post(
                     "/v1/conversations/$conversationId/welcome",
-                    JSONObject().put("device_id", deviceId).put("recipient_user_id", peer.id).put("payload", b64(welcome)),
+                    JSONObject().put("device_id", deviceId).put("recipient_user_id", peer.id)
+                        .put("recipient_device_id", kp.getString("device_id")).put("payload", b64(welcome)),
                 )
                 store.put("group:$conversationId", hex(groupId))
                 Readiness.Ready
@@ -371,7 +383,7 @@ class ChatEngine private constructor(
     /** Create a group (I am admin) and add [memberIds]. Returns the conversation id. */
     suspend fun createGroup(title: String, memberIds: List<String>): Pair<String, AddResult> {
         ensureDevice()
-        val conv = api.post("/v1/groups", JSONObject().put("title", title)).getString("id")
+        val conv = api.post("/v1/groups", JSONObject().put("title", title).put("device_id", deviceId)).getString("id")
         lock.withLock {
             val gid = newGroupId(conv)
             mls.createGroup(gid)
@@ -392,10 +404,12 @@ class ChatEngine private constructor(
             val ok = mutableListOf<String>()
             val missing = mutableListOf<String>()
             val packages = mutableListOf<ByteArray>()
+            val devices = JSONObject() // user -> the device whose KeyPackage was claimed (gets the Welcome)
             for (id in userIds.distinct()) {
                 try {
                     val kp = api.post("/v1/keys/claim", JSONObject().put("user_id", id).put("group_id", conv))
                     packages += Base64.decode(kp.getString("key_package"), Base64.NO_WRAP)
+                    devices.put(id, kp.getString("device_id"))
                     ok += id
                 } catch (e: ApiError) {
                     if (e.code in listOf("no_key_packages", "too_many_claims")) missing += id
@@ -408,7 +422,7 @@ class ChatEngine private constructor(
                     api.post(
                         "/v1/groups/$conv/members",
                         JSONObject().put("device_id", deviceId).put("user_ids", JSONArray(ok)).put("epoch", change.epoch.toLong())
-                            .put("commit", b64(change.commit)).put("welcome", b64(change.welcome!!)),
+                            .put("commit", b64(change.commit)).put("welcome", b64(change.welcome!!)).put("devices", devices),
                     )
                 }
             }
@@ -453,7 +467,7 @@ class ChatEngine private constructor(
                 mls.discardChange(gid)
                 if (e.code != "stale_epoch" || n == 2) throw e
                 // Apply the change that beat ours, then make ours again on the new epoch.
-                val batch = api.list("/v1/messages/sync?after=$cursor&limit=200&wait=0")
+                val batch = api.list("/v1/messages/sync?after=$cursor&limit=200&wait=0&device_id=$deviceId")
                 processLocked(batch)
             } catch (e: Exception) {
                 runCatching { mls.discardChange(gid) }
@@ -563,14 +577,17 @@ class ChatEngine private constructor(
         private const val TAG = "McXusChat"
         private const val MIN_KEY_PACKAGES = 10
         private const val UPLOAD_KEY_PACKAGES = 20
+        const val ELSEWHERE = "This chat is set up on your other device, so its messages can only be read there. " +
+            "New chats and groups use the device you opened McXus on most recently."
         private val random = SecureRandom()
 
         /** Opens the encrypted state on a background thread (native code). */
-        suspend fun create(context: Context, api: Api, userId: String): ChatEngine = withContext(Dispatchers.IO) {
-            val state = File(context.filesDir, "mls-$userId.bin").path
+        /** [profile] separates two installs of the same account in tests (e.g. a phone and an emulator). */
+        suspend fun create(context: Context, api: Api, userId: String, profile: String = ""): ChatEngine = withContext(Dispatchers.IO) {
+            val state = File(context.filesDir, "mls-$userId$profile.bin").path
             val mls = MlsClient.open(state, "user:$userId")
-            val media = File(context.filesDir, "chat-media-$userId").apply { mkdirs() }
-            ChatEngine(api, userId, ChatStore(context.applicationContext, userId), mls, media)
+            val media = File(context.filesDir, "chat-media-$userId$profile").apply { mkdirs() }
+            ChatEngine(api, userId, ChatStore(context.applicationContext, userId + profile), mls, media)
         }
 
         fun b64(bytes: ByteArray): String = Base64.encodeToString(bytes, Base64.NO_WRAP)

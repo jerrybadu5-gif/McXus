@@ -40,6 +40,17 @@ class ChatEngineServerTest {
     @After
     fun stop() = engines.forEach { it.stop() }
 
+    /** The same account opened on a second device (like Jerry's demo buyer on the phone and the emulator). */
+    private suspend fun secondDevice(of: Phone, name: String): Phone {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val api = sessions[of.userId]!!
+        val engine = ChatEngine.create(context, api, of.userId, profile = "-$name").also { engines += it; it.start() }
+        withTimeout(30_000) { while (!engine.online.value) delay(100) }
+        return Phone(engine, of.userId)
+    }
+
+    private val sessions = mutableMapOf<String, Api>()
+
     private suspend fun phone(name: String): Phone {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val session = Session(context, "test-$name").apply { this.server = this@ChatEngineServerTest.server!! }
@@ -49,6 +60,7 @@ class ChatEngineServerTest {
         val token = api.post("/v1/auth/otp/verify", JSONObject().put("phone", number).put("code", code))
         session.token = token.getString("access_token")
         val userId = token.getString("user_id")
+        sessions[userId] = api
         val engine = ChatEngine.create(context, api, userId).also { engines += it; it.start() }
         withTimeout(30_000) { while (!engine.online.value) delay(100) } // device registered, keys uploaded
         return Phone(engine, userId)
@@ -68,6 +80,7 @@ class ChatEngineServerTest {
         assertEquals(true, ruth.engine.send(conv, Payload.text("Moning! Is the solar lamp still available?")))
 
         waitFor(kila, conv, "Moning! Is the solar lamp still available?")
+        withTimeout(10_000) { while (kila.engine.conversations.value.none { it.id == conv }) delay(100) } // list refresh
         assertEquals(1, kila.engine.conversations.value.single { it.id == conv }.unread)
         assertEquals(Readiness.Ready, kila.engine.ensureReady(conv)) // joined from the Welcome
         kila.engine.send(conv, Payload.text("Yes, K120 with phone charger."))
@@ -162,5 +175,24 @@ class ChatEngineServerTest {
         withTimeout(20_000) { while (pastor.engine.groupInfo(group, refresh = true).epoch < 4) delay(300) }
         dan.engine.send(group, Payload.text("after Bob left"))
         waitFor(pastor, group, "after Bob left")
+    }
+
+    @Test
+    fun sameAccountOnTwoDevicesNeverShowsDecryptionErrors() = runBlocking {
+        val pastor = phone("pastor2")
+        val buyerPhone = phone("buyer-phone")
+        val buyerEmulator = secondDevice(buyerPhone, "emulator") // signed in later: now the device in use
+
+        val (group, _) = pastor.engine.createGroup("Two devices", listOf(buyerPhone.userId))
+        pastor.engine.send(group, Payload.text("Hello buyer"))
+        // The device in use gets the keys and reads the message.
+        withTimeout(40_000) { while (buyerEmulator.engine.ensureReady(group) != Readiness.Ready) delay(300) }
+        waitFor(buyerEmulator, group, "Hello buyer")
+        // The other device must not fill the chat with "could not be decrypted"; it explains once instead.
+        delay(2_000)
+        val other = buyerPhone.engine.messages(group).map { Payload.parse(it.payload).optString("body") }
+        assertEquals(emptyList<String>(), other.filter { it.contains("could not be decrypted") })
+        val readiness = buyerPhone.engine.ensureReady(group)
+        assertEquals(true, readiness is Readiness.Failed && (readiness as Readiness.Failed).why.contains("other device"))
     }
 }
