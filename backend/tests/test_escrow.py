@@ -231,7 +231,7 @@ def test_dispute_freezes_auto_release_and_mediator_splits(db, users, fake_clock)
     escrow.open_dispute(db, users["buyer"], order.id, "Lamp arrived cracked")
     db.commit()
     fake_clock.advance(days=8)
-    assert run_timers() == {}  # disputed orders are never auto-released
+    assert "RELEASED" not in run_timers()  # disputed orders are never auto-released (it goes to a mediator)
     with pytest.raises(Forbidden):
         escrow.resolve_dispute(db, users["buyer"], order.id, D("200.00"), "I win")
     escrow.resolve_dispute(db, users["mediator"], order.id, D("50.00"), "Partial damage: 25% refund")

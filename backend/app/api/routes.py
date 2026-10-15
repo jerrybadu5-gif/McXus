@@ -7,11 +7,11 @@ from fastapi import APIRouter, Depends, Header, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import audit
 from app.api.schemas import (
     DepositDecisionIn,
     DepositIn,
     DepositOut,
-    DisputeIn,
     HandoverIn,
     KycTierIn,
     OrderEventOut,
@@ -22,7 +22,6 @@ from app.api.schemas import (
     PaidOrderOut,
     PinOut,
     ReasonIn,
-    ResolveIn,
     RoleIn,
     StatementLineOut,
     TokenOut,
@@ -221,19 +220,11 @@ def confirm_receipt(order_id: uuid.UUID, user: Me, db: DB) -> OrderOut:
     return _act(db, escrow.confirm_receipt(db, user, order_id))
 
 
-@router.post("/orders/{order_id}/dispute", tags=["orders"])
-def open_dispute(order_id: uuid.UUID, body: DisputeIn, user: Me, db: DB) -> OrderOut:
-    escrow.open_dispute(db, user, order_id, body.reason)
-    db.commit()
-    return OrderOut.model_validate(escrow.get_order(db, order_id))
-
-
 # ---------- staff ----------
 
 KycStaff = Annotated[User, Depends(require_role("kyc"))]
 Admin = Annotated[User, Depends(require_role())]
 Finance = Annotated[User, Depends(require_role("finance"))]
-Mediator = Annotated[User, Depends(require_role("mediator"))]
 Oversight = Annotated[User, Depends(require_role("finance", "compliance"))]
 
 
@@ -247,6 +238,7 @@ def _user(db: Session, user_id: uuid.UUID) -> User:
 @router.post("/admin/users/{user_id}/kyc-tier", tags=["staff"])
 def set_kyc_tier(user_id: uuid.UUID, body: KycTierIn, staff: KycStaff, db: DB) -> UserOut:
     user = _user(db, user_id)
+    audit.record(db, staff, "kyc_tier", "user", user.id, f"{user.kyc_tier} -> {body.kyc_tier}. {body.note}".strip())
     user.kyc_tier = body.kyc_tier
     db.commit()
     return UserOut.model_validate(user)
@@ -255,6 +247,7 @@ def set_kyc_tier(user_id: uuid.UUID, body: KycTierIn, staff: KycStaff, db: DB) -
 @router.post("/admin/users/{user_id}/role", tags=["staff"])
 def set_role(user_id: uuid.UUID, body: RoleIn, staff: Admin, db: DB) -> UserOut:
     user = _user(db, user_id)
+    audit.record(db, staff, "role", "user", user.id, f"{user.role} -> {body.role}")
     user.role = body.role
     db.commit()
     return UserOut.model_validate(user)
@@ -263,6 +256,9 @@ def set_role(user_id: uuid.UUID, body: RoleIn, staff: Admin, db: DB) -> UserOut:
 @router.post("/admin/deposits", status_code=201, tags=["staff"])
 def record_deposit(body: DepositIn, staff: Finance, db: DB) -> DepositOut:
     deposit = wallet.record_deposit(db, staff, body.user_id, body.amount, body.method, body.external_ref)
+    audit.record(
+        db, staff, "deposit_recorded", "deposit", deposit.id, f"K{body.amount} {body.method} {body.external_ref}"
+    )
     db.commit()
     return DepositOut.model_validate(deposit)
 
@@ -270,6 +266,7 @@ def record_deposit(body: DepositIn, staff: Finance, db: DB) -> DepositOut:
 @router.post("/admin/deposits/{deposit_id}/decision", tags=["staff"])
 def decide_deposit(deposit_id: uuid.UUID, body: DepositDecisionIn, staff: Finance, db: DB) -> DepositOut:
     deposit = wallet.decide_deposit(db, staff, deposit_id, body.approve)
+    audit.record(db, staff, "deposit_approved" if body.approve else "deposit_rejected", "deposit", deposit.id)
     db.commit()
     return DepositOut.model_validate(deposit)
 
@@ -301,13 +298,16 @@ def list_withdrawals(
 @router.post("/admin/withdrawals/{withdrawal_id}/settle", tags=["staff"])
 def settle_withdrawal(withdrawal_id: uuid.UUID, body: WithdrawalSettleIn, staff: Finance, db: DB) -> WithdrawalOut:
     withdrawal = wallet.settle_withdrawal(db, staff, withdrawal_id, body.paid, body.bank_ref)
+    audit.record(
+        db,
+        staff,
+        "withdrawal_paid" if body.paid else "withdrawal_failed",
+        "withdrawal",
+        withdrawal.id,
+        body.bank_ref or "",
+    )
     db.commit()
     return WithdrawalOut.model_validate(withdrawal)
-
-
-@router.post("/admin/disputes/{order_id}/resolve", tags=["staff"])
-def resolve_dispute(order_id: uuid.UUID, body: ResolveIn, staff: Mediator, db: DB) -> OrderOut:
-    return _act(db, escrow.resolve_dispute(db, staff, order_id, body.buyer_refund, body.note))
 
 
 @router.get("/admin/reports/trial-balance", tags=["reports"])

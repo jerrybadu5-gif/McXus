@@ -100,6 +100,7 @@ fun MeTab(nav: NavHostController) {
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Color.White)) {
             Row_(Ic.Edit, "Edit profile & my listings") { nav.navigate(Routes.PROFILE) }
             Row_(Ic.Receipt, "My orders") { nav.navigate(Routes.ORDERS) }
+            Row_(Ic.Shield, "Disputes", tag = "my-disputes") { nav.navigate(Routes.DISPUTES) }
             Row_(Ic.Store, "Sell something") { nav.navigate(Routes.SELL) }
             var previews by remember { mutableStateOf(app.session.showPreviews) }
             Row_(Ic.Bell, "Notifications", if (previews) "Show text" else "Hide text", tag = "notif-previews") {

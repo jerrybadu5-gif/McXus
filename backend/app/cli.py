@@ -2,6 +2,7 @@
 
 python -m app.cli make-admin 71234567       give a phone number the admin role (creates the user)
 python -m app.cli seed-demo                 sandbox only: demo buyer, seller, staff (prints their phones)
+python -m app.cli seed-disputes             sandbox only: three sample disputes between the demo buyer and seller
 """
 
 import argparse
@@ -25,7 +26,55 @@ DEMO_USERS = [
     ("+67570000006", "Admin", "admin", 2),
     ("+67570000007", "Moderator", "moderator", 2),
     ("+67570000008", "Second Buyer", "user", 2),
+    ("+67570000009", "Compliance Officer", "compliance", 2),
+    ("+67570000010", "KYC Reviewer", "kyc", 2),
+    ("+67570000011", "Support Desk", "support", 2),
 ]
+
+
+def seed_disputes() -> None:
+    """Three sample disputes so the console and the app have something to show (sandbox only)."""
+    from decimal import Decimal
+
+    from app.disputes import service as disputes
+    from app.escrow import service as escrow
+    from app.wallet.service import sandbox_topup
+
+    with get_sessionmaker()() as db:
+
+        def get(phone: str) -> User:
+            user = db.scalars(select(User).where(User.phone == phone)).first()
+            if user is None:
+                raise SystemExit("Run seed-demo first")
+            return user
+
+        buyer, seller, mediator = get("+67570000001"), get("+67570000002"), get("+67570000005")
+        sandbox_topup(db, buyer, Decimal("655.00"))  # exactly the three orders below
+        made = []
+        for title, amount, reason in [
+            ("Solar lamp with phone charger", "120.00", "The lamp arrived with a cracked panel and does not charge."),
+            ("Bilum, large, handmade", "85.00", "The seller sent a smaller bilum than in the photos."),
+            (
+                "Second-hand Samsung A15",
+                "450.00",
+                "The phone switches off after ten minutes; the seller said it was fine.",
+            ),
+        ]:
+            order = escrow.create_order(db, buyer, seller.id, title, Decimal(amount))
+            escrow.pay(db, buyer, order.id)
+            escrow.accept(db, seller, order.id)
+            escrow.dispatch(db, seller, order.id)
+            disputes.open_dispute(db, buyer, order.id, reason)
+            made.append(order)
+        lamp, bilum, phone = made
+        disputes.make_offer(db, seller, lamp.id, Decimal("40.00"), "I can refund K40 for the panel")
+        disputes.add_statement(db, seller, bilum.id, "It is the bilum in the photos; the photos were taken close up.")
+        disputes.escalate(db, buyer, bilum.id)
+        disputes.escalate(db, seller, phone.id)
+        disputes.decide(db, mediator, phone.id, Decimal("300.00"), "The battery fault was there before the sale.")
+        disputes.appeal(db, seller, phone.id, "The buyer dropped the phone; the screen has a new crack.")
+        db.commit()
+        print("Disputes made: negotiating (lamp), with a mediator (bilum), appeal (phone).")
 
 
 def upsert_user(phone: str, name: str, role: str, tier: int) -> User:
@@ -47,6 +96,7 @@ def main() -> None:
     admin = sub.add_parser("make-admin")
     admin.add_argument("phone")
     sub.add_parser("seed-demo")
+    sub.add_parser("seed-disputes")
     token = sub.add_parser("dev-token")
     token.add_argument("phone")
     args = parser.parse_args()
@@ -61,6 +111,10 @@ def main() -> None:
             user = upsert_user(phone, name, role, tier)
             print(f"{name:<20} {phone}  role={role:<9} tier={tier}  id={user.id}")
         print("Sign in with POST /v1/auth/otp/request; the code is printed in the API window.")
+    elif args.command == "seed-disputes":
+        if not get_settings().sandbox_mode:
+            raise SystemExit("seed-disputes only runs in sandbox mode")
+        seed_disputes()
     elif args.command == "dev-token":
         if not get_settings().sandbox_mode:
             raise SystemExit("dev-token only runs in sandbox mode")

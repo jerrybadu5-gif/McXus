@@ -25,6 +25,7 @@ services:
     volumes:
       - media:/app/media   # listing photos (public)
       - blobs:/app/blobs   # encrypted chat photos and voice notes (private, unreadable to the server)
+      - evidence:/app/evidence   # dispute photos (private: the parties and staff only; kept with the order)
       - ./secrets:/app/secrets:ro   # optional: firebase.json for push (see docs/FIREBASE-PUSH.md)
     ports:
       - "${MCXUS_API_BIND:-127.0.0.1}:8000:8000"   # start-dev.ps1 -Lan sets 0.0.0.0 so a phone on your Wi-Fi can connect
@@ -32,7 +33,7 @@ services:
       db: {condition: service_healthy}
     restart: unless-stopped
 
-  worker:   # escrow timers (20-minute accept, 7-day auto-release) and 30-day deletion of chat messages/files
+  worker:   # escrow timers, dispute deadlines (negotiation, appeal window) and 30-day deletion of chat files
     build: ./backend
     command: ["python", "-m", "app.jobs"]
     healthcheck: {disable: true}   # no web server in the worker
@@ -45,7 +46,16 @@ services:
       api: {condition: service_healthy}
     restart: unless-stopped
 
+  admin:   # staff console (disputes, KYC, deposits & payouts, moderation, people, audit): http://localhost:8080
+    build: ./admin
+    ports:
+      - "127.0.0.1:8080:8080"   # staff only: never expose this beyond the office network without a VPN
+    depends_on:
+      api: {condition: service_healthy}
+    restart: unless-stopped
+
 volumes:
   pgdata:
   media:
   blobs:
+  evidence:

@@ -25,6 +25,18 @@
       "problemMatcher": []
     },
     {
+      "label": "McXus: open staff console",
+      "type": "shell",
+      "command": "powershell -NoProfile -Command \"docker compose up -d admin; Start-Process http://localhost:8080\"",
+      "problemMatcher": []
+    },
+    {
+      "label": "McXus: sample disputes (sandbox)",
+      "type": "shell",
+      "command": "docker compose exec -T api python -m app.cli seed-disputes",
+      "problemMatcher": []
+    },
+    {
       "label": "McXus: backend tests",
       "type": "shell",
       "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ${workspaceFolder}/run-tests.ps1",

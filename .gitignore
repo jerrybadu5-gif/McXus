@@ -27,3 +27,4 @@ secrets/*
 !secrets/README.txt
 android/app/google-services.json
 blobs/
+evidence/

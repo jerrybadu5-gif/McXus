@@ -16,7 +16,7 @@ if ($LASTEXITCODE -ne 0) {
     Read-Host "Press Enter to close"; exit 1
 }
 
-Write-Host "1/3  Building and starting database, API and worker (first run takes a few minutes)..." -ForegroundColor Cyan
+Write-Host "1/3  Building and starting database, API, worker and staff console (first run takes a few minutes)..." -ForegroundColor Cyan
 docker compose up -d --build
 if ($LASTEXITCODE -ne 0) { Write-Host "Could not start the containers." -ForegroundColor Red; Read-Host "Press Enter"; exit 1 }
 
@@ -29,7 +29,7 @@ for ($i = 0; $i -lt 60; $i++) {
 if (-not $ok) { Write-Host "API did not start. See: docker compose logs api" -ForegroundColor Red; Read-Host "Press Enter"; exit 1 }
 
 $level = (Invoke-RestMethod http://localhost:8000/health).api_level
-if (-not $level -or $level -lt 5) {
+if (-not $level -or $level -lt 6) {
     Write-Host "The API is an old build (api_level $level). Run:  docker compose build --no-cache api worker; docker compose up -d" -ForegroundColor Red
 } else { Write-Host "     Server api_level $level (matches the app)" -ForegroundColor Green }
 
@@ -38,6 +38,8 @@ docker compose exec -T api python -m app.cli seed-demo
 
 Write-Host ""
 Write-Host "McXus core is running (SANDBOX - test Stars only)." -ForegroundColor Green
+Write-Host "  Staff console: http://localhost:8080   (mediator 70000005, compliance 70000009, finance 70000003/4, admin 70000006)"
+Write-Host "  Sample disputes: docker compose exec api python -m app.cli seed-disputes"
 Write-Host "  API docs:   http://localhost:8000/docs"
 Write-Host "  Token:      docker compose exec api python -m app.cli dev-token 70000001"
 Write-Host "  SMS codes:  docker compose logs -f api"

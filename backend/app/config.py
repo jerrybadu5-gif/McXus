@@ -68,6 +68,15 @@ class Settings(BaseSettings):
     max_key_packages_per_device: int = 100
     sync_max_wait_seconds: int = 25  # long-poll: how long /messages/sync waits for something new
 
+    # Disputes (M4, ADR 0011)
+    dispute_negotiate_days: int = 3  # buyer and seller try to agree first
+    dispute_mediator_business_days: int = 5  # a mediator decides within this many PNG working days
+    dispute_appeal_days: int = 3  # either party may appeal the mediator's decision
+    dispute_max_photos: int = 5  # per person per dispute
+    dispute_max_statements: int = 20  # per person per dispute
+    evidence_dir: str = "evidence"  # dispute photos; private (served only to the parties and staff)
+    extra_holidays: list[str] = []  # extra PNG public holidays, ISO dates (e.g. a declared holiday)
+
     @model_validator(mode="after")
     def _prod_guards(self) -> "Settings":
         if self.env == "prod":

@@ -161,8 +161,34 @@ class ScreenshotTour {
             }
         }
         val dir = File(out!!).apply { mkdirs() }
-        listOf("signin", "chats", "chat", "discover", "market", "listing", "sell", "wallet", "order", "me", "place", "map", "group-chat", "group-info", "new-group", "sell-error", "error-toast").forEachIndexed { i, name ->
-            screen = if (name == "sell-error") "sell" else if (name == "error-toast") "market" else name
+        listOf("signin", "chats", "chat", "discover", "market", "listing", "sell", "wallet", "order", "me", "place", "map", "group-chat", "group-info", "new-group", "sell-error", "error-toast", "dispute", "order-disputed", "dispute-decided").forEachIndexed { i, name ->
+            if (name == "dispute") app.snackbar.currentSnackbarData?.dismiss()
+            if (name == "dispute") runBlocking {
+                // The seller accepts, the buyer disputes with a photo, the seller offers K40 back.
+                sellerApi.post("/v1/orders/$orderId/accept")
+                app.api.post("/v1/orders/$orderId/dispute", JSONObject().put("reason", "The panel is cracked and the lamp does not charge."))
+                val bmp = android.graphics.Bitmap.createBitmap(800, 600, android.graphics.Bitmap.Config.ARGB_8888)
+                android.graphics.Canvas(bmp).apply {
+                    drawColor(0xFF263445.toInt())
+                    drawLine(120f, 80f, 680f, 520f, android.graphics.Paint().apply { color = 0xFFE9EEF4.toInt(); strokeWidth = 10f })
+                }
+                val jpeg = java.io.ByteArrayOutputStream().use { bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, it); it.toByteArray() }
+                app.api.upload("/v1/disputes/$orderId/photos", jpeg)
+                sellerApi.post("/v1/disputes/$orderId/offers", JSONObject().put("buyer_refund", "40.00").put("note", "Sorry! K40 back for the panel?"))
+            }
+            if (name == "dispute-decided") runBlocking {
+                app.api.post("/v1/disputes/$orderId/escalate")
+                val admin = Session(context, "tour-admin").apply { this.server = this@ScreenshotTour.server!!; token = adminToken }
+                Api(admin).post("/v1/admin/disputes/$orderId/decide",
+                    JSONObject().put("buyer_refund", "60.00").put("note", "The photo shows a cracked panel; half back."))
+            }
+            screen = when (name) {
+                "sell-error" -> "sell"
+                "error-toast" -> "market"
+                "dispute-decided" -> "dispute"
+                "order-disputed" -> "order"
+                else -> name
+            }
             compose.waitForIdle()
             if (name == "sell-error") {
                 Thread.sleep(1500)
@@ -195,6 +221,7 @@ class ScreenshotTour {
             "listing" -> ListingScreen(nav, listingId)
             "sell" -> SellScreen(nav)
             "order" -> OrderScreen(nav, orderId)
+            "dispute" -> pg.mcxus.app.ui.screens.DisputeScreen(nav, orderId)
             "place" -> androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.padding(16.dp)) {
                 pg.mcxus.app.ui.PlaceField("Meet-up / pickup point", pg.mcxus.app.util.Place.of(-6.729, 146.997, "Eriku market gate"), {})
             }

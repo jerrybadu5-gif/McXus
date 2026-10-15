@@ -126,7 +126,7 @@ class App(context: Context, val scope: CoroutineScope) {
     }
 }
 
-const val MIN_SERVER_LEVEL = 5
+const val MIN_SERVER_LEVEL = 6
 const val ERROR = "error"
 const val OUTDATED = "The McXus server is older than this app. On the laptop run the task \"McXus: start backend\" (it rebuilds the server), then try again."
 

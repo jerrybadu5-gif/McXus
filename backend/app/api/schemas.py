@@ -121,10 +121,6 @@ class ReasonIn(BaseModel):
     reason: str = Field(default="", max_length=500)
 
 
-class DisputeIn(BaseModel):
-    reason: str = Field(min_length=5, max_length=2000)
-
-
 class HandoverIn(BaseModel):
     pin: str = Field(pattern=r"^\d{6}$")
 
@@ -143,10 +139,11 @@ class OrderEventOut(BaseModel):
 
 class KycTierIn(BaseModel):
     kyc_tier: int = Field(ge=0, le=3)
+    note: str = Field(default="", max_length=500, description="What was checked (kept in the staff audit log)")
 
 
 class RoleIn(BaseModel):
-    role: Literal["user", "support", "kyc", "mediator", "finance", "compliance", "admin"]
+    role: Literal["user", "support", "kyc", "moderator", "mediator", "finance", "compliance", "admin"]
 
 
 class DepositIn(BaseModel):
@@ -176,8 +173,3 @@ class DepositOut(BaseModel):
 class WithdrawalSettleIn(BaseModel):
     paid: bool
     bank_ref: str | None = Field(default=None, max_length=64)
-
-
-class ResolveIn(BaseModel):
-    buyer_refund: Annotated[Decimal, Field(ge=0, max_digits=14, decimal_places=2)]
-    note: str = Field(min_length=5, max_length=2000)

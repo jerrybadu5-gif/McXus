@@ -43,6 +43,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import pg.mcxus.app.ui.screens.ChatScreen
+import pg.mcxus.app.ui.screens.DisputeScreen
+import pg.mcxus.app.ui.screens.DisputesListScreen
 import pg.mcxus.app.ui.screens.HomeScreen
 import pg.mcxus.app.ui.screens.ListingScreen
 import pg.mcxus.app.ui.screens.GroupInfoScreen
@@ -111,6 +113,8 @@ object Routes {
     fun chat(id: String) = "chat/$id"
     fun listing(id: String) = "listing/$id"
     fun order(id: String) = "order/$id"
+    fun dispute(orderId: String) = "dispute/$orderId"
+    const val DISPUTES = "disputes"
     const val NEW_CHAT = "newchat"
     const val NEW_GROUP = "newgroup"
     fun group(id: String) = "group/$id"
@@ -138,6 +142,8 @@ private fun Root(pendingChat: MutableState<String?>) {
             composable("chat/{id}") { ChatScreen(nav, it.arguments?.getString("id")!!) }
             composable("listing/{id}") { ListingScreen(nav, it.arguments?.getString("id")!!) }
             composable("order/{id}") { OrderScreen(nav, it.arguments?.getString("id")!!) }
+            composable("dispute/{id}") { DisputeScreen(nav, it.arguments?.getString("id")!!) }
+            composable(Routes.DISPUTES) { DisputesListScreen(nav) }
             composable(Routes.NEW_CHAT) { NewChatScreen(nav) }
             composable(Routes.NEW_GROUP) { NewGroupScreen(nav) }
             composable("group/{id}") { GroupInfoScreen(nav, it.arguments?.getString("id")!!) }

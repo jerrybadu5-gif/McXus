@@ -122,7 +122,12 @@ fun OrderScreen(nav: NavHostController, orderId: String) {
         app.launch(onDone = { busy = false }) {
             val r = app.api.post("/v1/orders/$orderId/$action", body, idempotent = action in listOf("pay", "confirm-receipt", "handover"))
             if (action == "pay") app.session.pins[orderId] = r.str("handover_pin")
-            app.say("Done")
+            if (action == "dispute") {
+                app.say("Dispute opened. The Stars stay held until it is settled.")
+                nav.navigate(Routes.dispute(orderId))
+            } else {
+                app.say("Done")
+            }
             refresh++
         }
     }
@@ -161,13 +166,17 @@ fun OrderScreen(nav: NavHostController, orderId: String) {
                 Text("$it min left for the seller to accept", fontSize = 13.sp, color = Mx.Muted)
             }
             if (status == "DISPATCHED") Text("Auto-release on ${Format.dateTime(o.str("auto_release_at"))} unless you report a problem.", fontSize = 13.sp, color = Mx.Muted, textAlign = TextAlign.Center)
+            if (status == "DISPUTED" || status == "RESOLVED") {
+                BigButton(if (status == "DISPUTED") "Open the dispute" else "See how the dispute was settled",
+                    onClick = { nav.navigate(Routes.dispute(orderId)) }, modifier = Modifier.testTag("open-dispute"))
+            }
             if (o.str("closed_at").isNotEmpty()) {
                 Text("Fee ${Format.kina(o.str("fee_charged"))} · buyer refunded ${Format.kina(o.str("buyer_refunded"))} · seller paid ${Format.kina(o.str("seller_paid"))}",
                     fontSize = 12.sp, color = Mx.Muted, textAlign = TextAlign.Center)
             }
 
             val place = Place.from(o, "delivery_")
-            val open = o.str("closed_at").isEmpty()
+            val open = o.str("closed_at").isEmpty() && status != "DISPUTED"
             val method = o.str("delivery_method").ifEmpty { "meetup" }
             val placeTitle = when (method) {
                 "seller_delivers" -> "Seller delivers to"
@@ -250,6 +259,7 @@ fun OrderScreen(nav: NavHostController, orderId: String) {
                         Text("At handover, type the buyer's 6-digit PIN to receive your Stars.", fontSize = 14.sp, textAlign = TextAlign.Center)
                         Field(pinInput, { pinInput = it.filter(Char::isDigit).take(6) }, "Buyer's PIN", keyboard = KeyboardType.NumberPassword, tag = "seller-pin")
                         BigButton("Confirm handover", busy = busy, enabled = pinInput.length == 6, onClick = { act("handover", JSONObject().put("pin", pinInput)) })
+                        LineButton("Problem with this order? Open a dispute", { disputing = true }, Modifier.fillMaxWidth())
                         if (status == "ACCEPTED") {
                             LineButton("Mark as sent (courier / delivery)", { act("dispatch") }, Modifier.fillMaxWidth())
                             LineButton("Cancel order", {
@@ -296,13 +306,19 @@ fun OrderScreen(nav: NavHostController, orderId: String) {
         var reason by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { disputing = false },
-            title = { Text("Report a problem") },
-            text = { Field(reason, { reason = it.take(500) }, "What went wrong?", singleLine = false, minLines = 3) },
+            title = { Text("Open a dispute") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("The Stars stay held. You and the other person have 3 days to agree; if not, a McXus mediator decides.",
+                        fontSize = 13.sp, color = Mx.Body)
+                    Field(reason, { reason = it.take(2000) }, "What went wrong?", singleLine = false, minLines = 3, tag = "dispute-reason")
+                }
+            },
             confirmButton = {
-                TextButton(onClick = {
+                TextButton(enabled = reason.trim().length >= 5, onClick = {
                     disputing = false
-                    act("dispute", JSONObject().put("reason", reason.ifBlank { "Problem with the item" }))
-                }) { Text("Send") }
+                    act("dispute", JSONObject().put("reason", reason.trim()))
+                }) { Text("Open dispute") }
             },
             dismissButton = { TextButton(onClick = { disputing = false }) { Text("Cancel") } },
         )

@@ -1,0 +1,16 @@
+@import "@fontsource/plus-jakarta-sans/400.css";
+@import "@fontsource/plus-jakarta-sans/500.css";
+@import "@fontsource/plus-jakarta-sans/600.css";
+@import "@fontsource/plus-jakarta-sans/700.css";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { font-family: "Plus Jakarta Sans", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  body { @apply bg-bg text-body text-sm; }
+  h1, h2, h3 { @apply text-ink; }
+  .num { font-variant-numeric: tabular-nums; }
+  :focus-visible { outline: 2px solid #E9A23B; outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+}

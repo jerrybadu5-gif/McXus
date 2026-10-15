@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Header, Query, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import audit
 from app.api.market_schemas import (
     BuyIn,
     CategoryOut,
@@ -287,6 +288,7 @@ def reports_queue(staff: Moderator, db: DB, limit: Page = 50, offset: Offset = 0
 @router.post("/mod/listings/{listing_id}/decision", tags=["moderation"])
 def moderate(listing_id: uuid.UUID, body: ModerationIn, staff: Moderator, db: DB) -> ListingOut:
     listing = market.moderate(db, staff, listing_id, body.action)
+    audit.record(db, staff, f"listing_{body.action}", "listing", listing.id)
     db.commit()
     return _one(db, listing)
 

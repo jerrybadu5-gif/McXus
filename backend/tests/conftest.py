@@ -16,6 +16,7 @@ os.environ["MCXUS_DATABASE_URL"] = TEST_DB
 os.environ["MCXUS_ENV"] = "test"
 os.environ["MCXUS_SANDBOX_MODE"] = "true"
 os.environ["MCXUS_MEDIA_DIR"] = tempfile.mkdtemp(prefix="mcxus-media-")
+os.environ["MCXUS_EVIDENCE_DIR"] = tempfile.mkdtemp(prefix="mcxus-evidence-")
 
 import pytest  # noqa: E402
 from alembic import command  # noqa: E402
@@ -34,7 +35,8 @@ from app.wallet.service import sandbox_topup  # noqa: E402
 BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RESET_SQL = """
 SET mcxus.allow_truncate = on;
-TRUNCATE media_blobs, mls_messages, key_packages, conversation_members, conversations, devices,
+TRUNCATE staff_actions, dispute_events, dispute_evidence, dispute_offers,
+         media_blobs, mls_messages, key_packages, conversation_members, conversations, devices,
          postings, journal_entries, order_events, disputes, deposits, withdrawals, idempotency_keys, reviews,
          listing_reports, listing_photos,
          otp_codes, orders, listings RESTART IDENTITY;
