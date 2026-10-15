@@ -26,6 +26,7 @@ services:
       - media:/app/media   # listing photos (public)
       - blobs:/app/blobs   # encrypted chat photos and voice notes (private, unreadable to the server)
       - evidence:/app/evidence   # dispute photos (private: the parties and staff only; kept with the order)
+      - status:/app/status   # 24-hour status photos (private: only the people allowed to see them)
       - ./secrets:/app/secrets:ro   # optional: firebase.json for push (see docs/FIREBASE-PUSH.md)
     ports:
       - "${MCXUS_API_BIND:-127.0.0.1}:8000:8000"   # start-dev.ps1 -Lan sets 0.0.0.0 so a phone on your Wi-Fi can connect
@@ -42,6 +43,8 @@ services:
       MCXUS_DATABASE_URL: postgresql+psycopg://mcxus:${MCXUS_DB_PASSWORD:-mcxus}@db:5432/mcxus
     volumes:
       - blobs:/app/blobs
+      - status:/app/status   # the worker deletes status photos after 24 hours
+      - media:/app/media
     depends_on:
       api: {condition: service_healthy}
     restart: unless-stopped
@@ -59,3 +62,4 @@ volumes:
   media:
   blobs:
   evidence:
+  status:

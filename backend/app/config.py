@@ -75,7 +75,16 @@ class Settings(BaseSettings):
     dispute_max_photos: int = 5  # per person per dispute
     dispute_max_statements: int = 20  # per person per dispute
     evidence_dir: str = "evidence"  # dispute photos; private (served only to the parties and staff)
-    extra_holidays: list[str] = []  # extra PNG public holidays, ISO dates (e.g. a declared holiday)
+    extra_holidays: list[str] = []
+
+    # Social (M5, ADR 0012)
+    status_hours: int = 24  # a status disappears (and its photo is deleted) after this
+    status_dir: str = "status"  # status photos; private (served only to the people allowed to see the status)
+    statuses_per_day: int = 30
+    posts_per_day: int = 20
+    comments_per_day: int = 100
+    max_post_photos: int = 4
+    channels_per_user: int = 5  # extra PNG public holidays, ISO dates (e.g. a declared holiday)
 
     @model_validator(mode="after")
     def _prod_guards(self) -> "Settings":

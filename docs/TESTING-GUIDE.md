@@ -218,3 +218,22 @@ sandbox fills in the code. Mediator 70000005 · compliance 70000009 · finance 7
 
 - Are the three windows right: **3 days** to agree, **5 PNG working days** for the mediator, **3 days** to appeal?
 - Should the senior decision be **compliance or admin** (as built), or a separate "senior mediator" role?
+
+## 10. M5 status, posts and channels (30 minutes)
+
+Rebuild (task **McXus: start backend**) and reinstall the app (Ctrl+Shift+B). Use two accounts that already chat
+(e.g. demo buyer on the phone, demo seller on the emulator).
+
+| # | Do | You should see |
+|---|---|---|
+| S1 | Discover → **+ › Add a status (24 h)**: type, pick a colour, **Share** | "My status" gets a blue ring; tap it to see it with **Seen by 0** |
+| S2 | On the other account: Discover | the person appears in the status row with a gold ring; tap to view (taps move on, hold pauses); the ring turns grey |
+| S3 | First account: open your status → **Seen by** | the other person's name |
+| S4 | New status → **Photo**, or **Who sees it** → tick someone | photo status works; the ticked person no longer sees your status |
+| S5 | Discover → **What's happening?**: text + 2 photos, **Everyone** → Post | the post is at the top of the feed for both accounts |
+| S6 | Post again with **People I chat with** | only your chat contacts see it |
+| S7 | Other account: ♡ the post, open it, write a comment | counts go up; the author can delete the comment |
+| S8 | Discover → people icon (top right) → **+ New channel** (demo seller, level 2) | channel page; **Write a post** posts into it |
+| S9 | Other account: Channels → search the name in any case → **Follow** | the channel's posts appear in Discover › For you and › Following |
+| S10 | ⋮ on a post → **Report post** from three different accounts | the post disappears for others; console (moderator 70000007) → **Reports › Posts, comments & channels** lists it; **Remove post** or **Keep it** |
+| S11 | Wait 24 hours (or check the next day) | the status is gone |

@@ -20,6 +20,7 @@ from app.errors import NotFound
 from app.ledger.service import user_account
 from app.marketplace import trust
 from app.models import AccountFreeze, Deposit, Dispute, ListingReport, Order, StaffAction, User, Withdrawal
+from app.social import service as social
 
 router = APIRouter(prefix="/v1/admin", tags=["staff"])
 DB = Annotated[Session, Depends(get_db)]
@@ -67,6 +68,7 @@ class OverviewOut(BaseModel):
     deposits_pending: int
     withdrawals_requested: int
     reports_open: int
+    content_reports_open: int
     freezes_open: int
     freeze_appeals: int
     users: int
@@ -90,6 +92,7 @@ def overview(staff: AnyStaff, db: DB) -> OverviewOut:
             select(func.count()).select_from(Withdrawal).where(Withdrawal.status == "requested")
         ),
         reports_open=count(select(func.count()).select_from(ListingReport).where(ListingReport.status == "open")),
+        content_reports_open=social.open_report_count(db),
         freezes_open=count(
             select(func.count()).select_from(AccountFreeze).where(AccountFreeze.status.in_(freezes.OPEN))
         ),

@@ -15,7 +15,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const waiting = counts ? {
     disputes: (counts.disputes.mediation ?? 0) + (counts.disputes.appeal ?? 0),
     money: counts.deposits_pending + counts.withdrawals_requested,
-    moderation: counts.reports_open,
+    moderation: counts.reports_open + counts.content_reports_open,
     freezes: counts.freeze_appeals,
   } : null;
 
@@ -23,7 +23,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { to: "/", label: "Home", icon: Home, show: true, end: true },
     { to: "/disputes", label: "Disputes", icon: Gavel, show: can(me, "disputes"), count: waiting?.disputes, late: counts?.disputes_overdue },
     { to: "/money", label: "Deposits & payouts", icon: Banknote, show: can(me, "money"), count: waiting?.money },
-    { to: "/moderation", label: "Reported listings", icon: Flag, show: can(me, "moderation"), count: waiting?.moderation },
+    { to: "/moderation", label: "Reports", icon: Flag, show: can(me, "moderation"), count: waiting?.moderation },
     { to: "/people", label: "People", icon: Users, show: can(me, "people") },
     { to: "/freezes", label: "Frozen accounts", icon: Lock, show: can(me, "freezes"), count: waiting?.freezes },
     { to: "/reports", label: "Money reports", icon: FileBarChart, show: can(me, "reports") },

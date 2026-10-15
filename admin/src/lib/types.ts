@@ -29,7 +29,13 @@ export interface Dispute extends DisputeSummary {
 
 export interface Overview {
   role: Role; disputes: Partial<Record<Stage, number>>; disputes_overdue: number; deposits_pending: number;
-  withdrawals_requested: number; reports_open: number; freezes_open: number; freeze_appeals: number; users: number; staff: number;
+  withdrawals_requested: number; reports_open: number; content_reports_open: number; freezes_open: number; freeze_appeals: number; users: number; staff: number;
+}
+
+export interface ContentReportGroup {
+  target_type: "post" | "comment" | "channel"; target_id: string; reports: number; first_at: string; reasons: string[]; notes: string[];
+  content: Record<string, unknown> & { text?: string; name?: string; handle?: string; description?: string; status?: string;
+    author?: { name: string }; owner?: { name: string }; followers?: number; photos?: { thumb_url: string }[] };
 }
 
 export interface FreezeCase {
