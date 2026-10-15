@@ -3,10 +3,27 @@
 # and other programs may already use 8080, so the console moves to the first port that is free.
 # Use: . .\scripts\console-port.ps1 ; $port = Get-ConsolePort
 function Test-PortFree([int]$Port) {
-    try {
-        $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $Port)
-        $listener.Start(); $listener.Stop(); return $true
-    } catch { return $false }
+    # Free for Windows on both loopback and all addresses (Docker Desktop publishes on 0.0.0.0)...
+    foreach ($address in @([System.Net.IPAddress]::Loopback, [System.Net.IPAddress]::Any)) {
+        try {
+            $listener = [System.Net.Sockets.TcpListener]::new($address, $Port)
+            $listener.Start(); $listener.Stop()
+        } catch { return $false }
+    }
+    return $true
+}
+
+# ...and not already published by another Docker container (e.g. McLender), which Windows does not always show.
+function Get-DockerPorts {
+    $old = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    try { $lines = @(& docker ps --format "{{.Names}} {{.Ports}}" 2>$null) } catch { $lines = @() }
+    $ErrorActionPreference = $old
+    $ports = @()
+    foreach ($line in $lines) {
+        if ("$line" -match '^mcxus-admin') { continue }
+        foreach ($m in [regex]::Matches("$line", ':(\d+)->')) { $ports += [int]$m.Groups[1].Value }
+    }
+    return $ports
 }
 
 function Get-ConsolePort {
@@ -27,14 +44,15 @@ function Get-ConsolePort {
     $candidates = @()
     if ($saved) { $candidates += $saved }
     $candidates += 8080, 8090, 8180, 8280, 8380, 9080, 9180, 18080, 28080, 38080
+    $taken = Get-DockerPorts
     foreach ($port in $candidates) {
-        if (Test-PortFree $port) {
+        if ($taken -notcontains $port -and (Test-PortFree $port)) {
             if ($port -ne $saved) {
                 $lines = @()
                 if (Test-Path $envFile) { $lines = @(Get-Content $envFile | Where-Object { $_ -notmatch '^MCXUS_ADMIN_PORT=' }) }
                 $lines += "MCXUS_ADMIN_PORT=$port"
                 Set-Content -Path $envFile -Value $lines -Encoding ascii
-                if ($port -ne 8080) { Write-Host "     Port 8080 is not available on this PC; the staff console uses port $port." -ForegroundColor Yellow }
+                if ($port -ne 8080) { Write-Host "     Ports before $port are in use on this PC; the staff console uses port $port." -ForegroundColor Yellow }
             }
             $env:MCXUS_ADMIN_PORT = "$port"
             return $port
