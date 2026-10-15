@@ -116,7 +116,8 @@ fun ChatScreen(nav: NavHostController, conversationId: String) {
     val recorder = remember { VoiceRecorder(context) }
     var recordingMs by remember { mutableStateOf(-1L) }
     var cameraUri by remember { mutableStateOf<android.net.Uri?>(null) }
-    val removed = readiness is Readiness.Failed && isGroup
+    val removed = readiness is Readiness.Failed && isGroup && engine.isRemoved(conversationId)
+    val elsewhere = readiness is Readiness.Failed && engine.onOtherDevice(conversationId)
 
     DisposableEffect(conversationId) {
         app.openChat = conversationId
@@ -263,9 +264,10 @@ fun ChatScreen(nav: NavHostController, conversationId: String) {
         }
 
         // Composer
-        if (removed) {
+        if (removed || elsewhere) {
             Text(
-                "You can't send messages to this group because you're no longer a member.",
+                if (removed) "You can't send messages to this group because you're no longer a member."
+                else "Read and reply to this chat on your other device.",
                 Modifier.fillMaxWidth().background(Color.White).navigationBarsPadding().padding(16.dp),
                 color = Mx.Muted, fontSize = 13.sp, textAlign = TextAlign.Center,
             )

@@ -79,6 +79,7 @@ class App(context: Context, val scope: CoroutineScope) {
         session.userId = userId
         signedIn = true
         startChat()
+        usedNow() // signing in on this device means it is the one in use
     }
 
     /** Which chat is on screen (no notification for it) and whether McXus is in front. */
@@ -105,7 +106,18 @@ class App(context: Context, val scope: CoroutineScope) {
         engine
     }
 
+    private var activatedAt = 0L
+
+    /** The person is using this device (app opened or touched); at most once a minute. See [ChatEngine.activate]. */
+    fun usedNow() {
+        val now = System.currentTimeMillis()
+        if (!signedIn || now - activatedAt < 60_000) return
+        activatedAt = now
+        launch { ensureChat()?.activate() }
+    }
+
     fun signOut() {
+        activatedAt = 0L
         chat?.let { engine -> scope.launch { runCatching { engine.registerPushToken(null) } } }
         chat?.stop()
         chat = null

@@ -35,8 +35,9 @@ object Notifier {
         if (!allowed(context)) return
         if (app.inForeground && app.openChat == incoming.conversationId) return
         val conv = engine.conversation(incoming.conversationId)
-        val title = conv?.name ?: "McXus"
-        val preview = if (app.session.showPreviews) Payload.preview(incoming.message.payload) else "New message"
+        val show = app.session.showPreviews
+        val title = if (show) conv?.name ?: "McXus" else "McXus"
+        val preview = if (show) Payload.preview(incoming.message.payload) else "New message"
         val open = PendingIntent.getActivity(
             context, incoming.conversationId.hashCode(),
             Intent(context, MainActivity::class.java).putExtra(MainActivity.EXTRA_CHAT, incoming.conversationId)

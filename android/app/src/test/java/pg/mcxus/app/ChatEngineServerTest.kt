@@ -179,20 +179,52 @@ class ChatEngineServerTest {
 
     @Test
     fun sameAccountOnTwoDevicesNeverShowsDecryptionErrors() = runBlocking {
-        val pastor = phone("pastor2")
-        val buyerPhone = phone("buyer-phone")
-        val buyerEmulator = secondDevice(buyerPhone, "emulator") // signed in later: now the device in use
+        // Jerry's setup: the demo buyer on the PC emulator and on the phone; the phone also signs in as the seller.
+        val seller = phone("seller")
+        val buyerEmulator = phone("buyer-emulator")
+        val buyerPhone = secondDevice(buyerEmulator, "phone")
+        buyerPhone.engine.activate() // the buyer is using the phone now
 
-        val (group, _) = pastor.engine.createGroup("Two devices", listOf(buyerPhone.userId))
-        pastor.engine.send(group, Payload.text("Hello buyer"))
-        // The device in use gets the keys and reads the message.
-        withTimeout(40_000) { while (buyerEmulator.engine.ensureReady(group) != Readiness.Ready) delay(300) }
-        waitFor(buyerEmulator, group, "Hello buyer")
-        // The other device must not fill the chat with "could not be decrypted"; it explains once instead.
-        delay(2_000)
-        val other = buyerPhone.engine.messages(group).map { Payload.parse(it.payload).optString("body") }
-        assertEquals(emptyList<String>(), other.filter { it.contains("could not be decrypted") })
-        val readiness = buyerPhone.engine.ensureReady(group)
-        assertEquals(true, readiness is Readiness.Failed && (readiness as Readiness.Failed).why.contains("other device"))
+        // The emulator is left running and reconnects (server rebuilt): that must not make it the active device.
+        buyerEmulator.engine.stop()
+        val emulator = reopen(buyerEmulator)
+
+        val (group, _) = seller.engine.createGroup("Two devices", listOf(buyerPhone.userId))
+        seller.engine.send(group, Payload.text("first group message"))
+        withTimeout(40_000) { while (buyerPhone.engine.ensureReady(group) != Readiness.Ready) delay(300) }
+        waitFor(buyerPhone, group, "first group message")
+        buyerPhone.engine.send(group, Payload.text("reply from the phone"))
+        waitFor(seller, group, "reply from the phone")
+
+        // The emulator shows one grey note and never the message or a decryption error.
+        withTimeout(20_000) { while (bodies(emulator, group).none { it.contains("other device") }) delay(200) }
+        delay(1_500)
+        val onEmulator = bodies(emulator, group)
+        assertEquals(1, onEmulator.size)
+        assertEquals(true, onEmulator.single().contains("other device"))
+        assertEquals(true, emulator.engine.onOtherDevice(group))
+        val readiness = emulator.engine.ensureReady(group)
+        assertEquals(true, readiness is Readiness.Failed && readiness.why.contains("other device"))
+        // The seller, who made the group on this phone, has no grey notes at all.
+        assertEquals(Readiness.Ready, seller.engine.ensureReady(group))
+        assertEquals(emptyList<String>(), bodies(seller, group).filter { "device" in it || "decrypt" in it })
+
+        // Using the emulator again moves new chats there.
+        emulator.engine.activate()
+        val (group2, _) = seller.engine.createGroup("Now on the emulator", listOf(buyerPhone.userId))
+        seller.engine.send(group2, Payload.text("second group"))
+        waitFor(emulator, group2, "second group")
+    }
+
+    /** Message and note texts (group events like "Seller added Buyer" left out). */
+    private fun bodies(p: Phone, conv: String) = p.engine.messages(conv).map { Payload.parse(it.payload) }
+        .filter { it.optString("t") != "event" }.map { it.optString("body") }
+
+    /** The same install opened again (same files), e.g. after a reconnect or a push wake-up. */
+    private suspend fun reopen(of: Phone): Phone {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val engine = ChatEngine.create(context, sessions[of.userId]!!, of.userId).also { engines += it; it.start() }
+        withTimeout(30_000) { while (!engine.online.value) delay(100) }
+        return Phone(engine, of.userId)
     }
 }

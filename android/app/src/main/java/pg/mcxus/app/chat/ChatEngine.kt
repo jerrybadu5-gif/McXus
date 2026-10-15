@@ -139,8 +139,6 @@ class ChatEngine private constructor(
 
     private suspend fun setUp() {
         ensureDevice()
-        // The device opened most recently is the one new chats and groups are set up on (ADR 0010).
-        api.post("/v1/devices/$deviceId/activate")
         topUpKeyPackages()
         refreshConversations()
         _online.value = true
@@ -150,6 +148,17 @@ class ChatEngine private constructor(
         if (deviceId.isNotEmpty()) return
         deviceId = store.get("device_id") ?: api.post("/v1/devices", JSONObject().put("name", android.os.Build.MODEL ?: "Android"))
             .getString("device_id").also { store.put("device_id", it) }
+    }
+
+    /**
+     * The person is using McXus on this device (app opened or touched): new chats and groups are set up here from
+     * now on (ADR 0010). Not called on reconnects or push wake-ups, so a device left running in the background
+     * (say the PC emulator) never takes over from the phone in your hand.
+     */
+    suspend fun activate() {
+        ensureDevice()
+        api.post("/v1/devices/$deviceId/activate")
+        topUpKeyPackages() // activating retired the other devices' unused keys; make sure this one has enough
     }
 
     /** Send this phone's Firebase token so the server can wake it (null = no pushes). */
@@ -218,6 +227,9 @@ class ChatEngine private constructor(
     }
 
     private suspend fun process(batch: JSONArray) {
+        // Know every chat in the batch first, so notes about where its keys live are right from the first message.
+        val ids = (0 until batch.length()).map { batch.getJSONObject(it).getString("conversation_id") }.toSet()
+        if (ids.any { id -> serverConversations.none { it.getString("id") == id } }) runCatching { refreshConversations() }
         val effects = lock.withLock { processLocked(batch) }
         if (effects.unknownChat) refreshConversations() else publish()
         if (effects.gotWelcome) runCatching { topUpKeyPackages() }
@@ -297,7 +309,7 @@ class ChatEngine private constructor(
                     // This chat's keys are on my other device (or an earlier install): say so once, not per message.
                     if (store.get("elsewhere:$conv") == null) {
                         store.put("elsewhere:$conv", "1")
-                        store.add(conv, null, false, Payload.system(ELSEWHERE), at, false)
+                        store.add(conv, null, false, Payload.system(if (keysElsewhere(conv)) ELSEWHERE else NO_KEYS), at, false)
                     }
                     return
                 }
@@ -319,6 +331,15 @@ class ChatEngine private constructor(
             }
         }
     }
+
+    /** The server says another of my devices holds this chat's keys. */
+    private fun keysElsewhere(conv: String): Boolean {
+        val keys = serverConversations.firstOrNull { it.getString("id") == conv }?.let { if (it.isNull("keys_device_id")) null else it.optString("keys_device_id") }
+        return !keys.isNullOrEmpty() && keys != deviceId
+    }
+
+    /** This device can't read or send in [conv] because the keys are on my other device. */
+    fun onOtherDevice(conv: String): Boolean = group(conv) == null && keysElsewhere(conv)
 
     private fun group(conv: String): ByteArray? = store.get("group:$conv")?.let(::unhex)
 
@@ -578,7 +599,8 @@ class ChatEngine private constructor(
         private const val MIN_KEY_PACKAGES = 10
         private const val UPLOAD_KEY_PACKAGES = 20
         const val ELSEWHERE = "This chat is set up on your other device, so its messages can only be read there. " +
-            "New chats and groups use the device you opened McXus on most recently."
+            "New chats and groups go to the device you used McXus on most recently."
+        const val NO_KEYS = "Earlier messages in this chat can't be read on this device (its keys were set up before this install)."
         private val random = SecureRandom()
 
         /** Opens the encrypted state on a background thread (native code). */

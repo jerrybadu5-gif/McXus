@@ -25,10 +25,10 @@ class Session(context: Context, name: String = "mcxus") {
         get() = prefs.getString("phone", "") ?: ""
         set(value) = prefs.edit().putString("phone", value).apply()
 
-    /** Show message text in notifications (off: "New message" only). */
+    /** Show who wrote and the text in notifications. Off by default (privacy first): "McXus · New message" only. */
     var showPreviews: Boolean
-        get() = prefs.getBoolean("show_previews", true)
-        set(value) = prefs.edit().putBoolean("show_previews", value).apply()
+        get() = prefs.getBoolean("show_previews_v2", false)
+        set(value) = prefs.edit().putBoolean("show_previews_v2", value).apply()
 
     var role: String = "user"
     var tier: Int = 0

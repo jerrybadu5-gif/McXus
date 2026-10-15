@@ -36,10 +36,13 @@ photos + voice notes; groups up to 256)
 
 ## Known limits
 - One device per account holds a chat's keys. If the same account is opened on two devices (say a phone and
-  the PC emulator), the device opened most recently is "active": new chats and groups are set up for it, and
+  the PC emulator), the device the person used most recently (opened, brought to the front or touched; not a
+  background reconnect or push wake-up) is "active": new chats and groups are set up for it, and
   the server sends their Welcome only to that device (`recipient_device_id`, API level 5). The other device
   shows one notice ("This chat is set up on your other device…") instead of "could not be decrypted" for
-  every message. Real multi-device (each device a separate MLS member) is planned after the pilot.
+  every message, and the composer says to reply on the other device. Real multi-device (each device a separate MLS member) is planned after the pilot.
+- Notifications say only "McXus · New message" by default; showing who wrote and the text is opt-in
+  (Me › Notifications).
 - Reinstalling loses group keys: an admin removes and re-adds the person.
 - Chat backup/restore is not in this release.
 - Long-poll still delivers while the app is open; push only wakes it.

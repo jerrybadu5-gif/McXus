@@ -84,6 +84,12 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         app.inForeground = true
+        app.usedNow()
+    }
+
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
+        if (ev.actionMasked == android.view.MotionEvent.ACTION_DOWN) app.usedNow()
+        return super.dispatchTouchEvent(ev)
     }
 
     override fun onStop() {
