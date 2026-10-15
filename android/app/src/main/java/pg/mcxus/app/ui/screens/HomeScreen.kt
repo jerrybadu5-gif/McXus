@@ -63,6 +63,7 @@ fun HomeScreen(nav: NavHostController, initialTab: Int = 0) {
         }
     }
     Column(Modifier.fillMaxSize().background(Mx.Bg)) {
+        pg.mcxus.app.ui.ServerOutdatedBanner()
         Box(Modifier.weight(1f)) {
             when (tab) {
                 0 -> ChatsTab(nav)

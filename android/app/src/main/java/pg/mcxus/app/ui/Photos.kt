@@ -52,11 +52,11 @@ fun PhotoButtons(listingId: String, onUploaded: () -> Unit) {
             put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
         }
         cameraUri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
-        cameraUri?.let { camera.launch(it) } ?: app.say("Could not open the camera")
+        cameraUri?.let { camera.launch(it) } ?: app.say("Could not open the camera", error = true)
     }
 
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) openCamera() else app.say("Storage permission is needed to save camera photos on this Android version")
+        if (granted) openCamera() else app.say("Storage permission is needed to save camera photos on this Android version", error = true)
     }
 
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {

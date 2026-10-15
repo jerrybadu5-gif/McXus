@@ -42,9 +42,14 @@ async def security_headers(request: Request, call_next):  # type: ignore[no-unty
     return response
 
 
+# Raised whenever the app needs new server features, so an old server is reported clearly instead of "Not Found".
+# 1 = M1-M2, 2 = M3 chat, 3 = M3.1 places, 4 = M3.2 groups/media/push.
+API_LEVEL = 4
+
+
 @app.get("/health", tags=["health"])
 def health() -> dict[str, object]:
-    return {"status": "ok", "sandbox": settings.sandbox_mode}
+    return {"status": "ok", "sandbox": settings.sandbox_mode, "api_level": API_LEVEL}
 
 
 app.include_router(router)

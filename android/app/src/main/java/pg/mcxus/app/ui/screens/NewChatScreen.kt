@@ -67,7 +67,7 @@ fun NewChatScreen(nav: NavHostController) {
                     }
                 }
                 BigButton("Start encrypted chat", busy = busy, onClick = {
-                    val engine = app.chat ?: return@BigButton app.say("Encryption is still starting, try again in a second.")
+                    val engine = app.chat ?: return@BigButton app.say("Encryption is still starting, try again in a second.", error = true)
                     busy = true
                     app.launch(onDone = { busy = false }) {
                         val id = engine.open(person.str("id"))

@@ -280,3 +280,32 @@ fun StarsAmount(amount: String, big: Boolean = false) {
             modifier = Modifier.padding(bottom = if (big) 4.dp else 1.dp))
     }
 }
+
+/** A red message bubble shown where the problem is (e.g. above a form's button). Tap to dismiss. */
+@Composable
+fun ErrorBubble(text: String, onDismiss: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0xFFFDE2E1))
+            .border(1.dp, Mx.Red.copy(alpha = 0.4f), RoundedCornerShape(14.dp)).clickable(onClick = onDismiss)
+            .padding(horizontal = 12.dp, vertical = 10.dp).testTag("form-error"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text("⚠", color = Mx.Red, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        Text(text, color = Color(0xFF7A1A14), fontSize = 14.sp, lineHeight = 19.sp, modifier = Modifier.weight(1f))
+    }
+}
+
+/** Shown on the main tabs when the server is older than this app. */
+@Composable
+fun ServerOutdatedBanner() {
+    val app = LocalApp.current
+    if (!app.serverOutdated) return
+    Row(
+        Modifier.fillMaxWidth().background(Mx.Red).statusBarsPadding().padding(horizontal = 14.dp, vertical = 10.dp).testTag("server-outdated"),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(pg.mcxus.app.OUTDATED, color = Color.White, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.weight(1f))
+        Text("Retry", color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { app.checkServer() }.padding(8.dp))
+    }
+}

@@ -210,8 +210,8 @@ private fun AmountDialog(title: String, note: String, withBank: Boolean, onDismi
         confirmButton = {
             TextButton(onClick = {
                 val value = Format.amount(amount)
-                if (value == null) app.say("Enter an amount like 200 or 12.50")
-                else if (withBank && bank.trim().length < 4) app.say("Enter your bank and account number")
+                if (value == null) app.say("Enter an amount like 200 or 12.50", error = true)
+                else if (withBank && bank.trim().length < 4) app.say("Enter your bank and account number", error = true)
                 else { onDismiss(); onOk(value, bank.trim()) }
             }, modifier = Modifier.testTag("amount-ok")) { Text("OK") }
         },

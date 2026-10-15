@@ -140,7 +140,7 @@ fun ChatScreen(nav: NavHostController, conversationId: String) {
             val jpeg = withContext(Dispatchers.Default) { Images.prepareUpload(context.contentResolver, uri, maxPx = 1280, quality = 70) }
             val (w, h) = Images.size(jpeg)
             val thumb = withContext(Dispatchers.Default) { Images.thumbnail(jpeg) }
-            if (!engine.sendImage(conversationId, jpeg, w, h, thumb, draft.trim())) app.say("This chat is not ready yet — try again in a moment.")
+            if (!engine.sendImage(conversationId, jpeg, w, h, thumb, draft.trim())) app.say("This chat is not ready yet — try again in a moment.", error = true)
             else draft = ""
         }
     }
@@ -153,18 +153,18 @@ fun ChatScreen(nav: NavHostController, conversationId: String) {
     }
 
     fun startRecording() {
-        runCatching { recorder.start(); recordingMs = 0 }.onFailure { app.say("Could not start the microphone") }
+        runCatching { recorder.start(); recordingMs = 0 }.onFailure { app.say("Could not start the microphone", error = true) }
     }
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) startRecording() else app.say("Microphone permission is needed for voice messages")
+        if (granted) startRecording() else app.say("Microphone permission is needed for voice messages", error = true)
     }
     fun stopAndSend() {
         val result = recorder.stop()
         recordingMs = -1
-        if (result == null) { app.say("Hold on a little longer to record"); return }
+        if (result == null) { app.say("Hold on a little longer to record", error = true); return }
         sending = true
         app.launch(onDone = { sending = false }) {
-            if (!engine.sendVoice(conversationId, result.first, result.second)) app.say("This chat is not ready yet — try again in a moment.")
+            if (!engine.sendVoice(conversationId, result.first, result.second)) app.say("This chat is not ready yet — try again in a moment.", error = true)
         }
     }
 
@@ -188,7 +188,7 @@ fun ChatScreen(nav: NavHostController, conversationId: String) {
     fun send(payload: String, after: () -> Unit = {}) {
         sending = true
         app.launch(onDone = { sending = false }) {
-            if (engine.send(conversationId, payload)) after() else app.say("This chat is not ready yet — try again in a moment.")
+            if (engine.send(conversationId, payload)) after() else app.say("This chat is not ready yet — try again in a moment.", error = true)
         }
     }
 
@@ -353,7 +353,7 @@ fun ChatScreen(nav: NavHostController, conversationId: String) {
             if (draft.isBlank()) {
                 IconButton(
                     onClick = {
-                        if (readiness != Readiness.Ready) app.say("This chat is not ready yet — try again in a moment.")
+                        if (readiness != Readiness.Ready) app.say("This chat is not ready yet — try again in a moment.", error = true)
                         else if (context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) startRecording()
                         else micPermission.launch(android.Manifest.permission.RECORD_AUDIO)
                     },
@@ -396,7 +396,7 @@ fun ChatScreen(nav: NavHostController, conversationId: String) {
             },
             confirmButton = {
                 TextButton(onClick = {
-                    if (draft.isEmpty) return@TextButton app.say("Use your location, the map, or type a landmark")
+                    if (draft.isEmpty) return@TextButton app.say("Use your location, the map, or type a landmark", error = true)
                     sharingPlace = false
                     send(Payload.location(draft))
                 }, modifier = Modifier.testTag("send-location")) { Text("Send") }

@@ -23,6 +23,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,8 +58,9 @@ import pg.mcxus.app.util.Place
 import pg.mcxus.app.util.Places
 
 /**
- * Choose where people meet or deliver: GPS first ("Use my current location" or "Set on map"),
- * then an address/landmark that people recognise. [requirePng] keeps points inside PNG (the server's rule).
+ * Where people meet or deliver. Location first: when the form opens it uses the phone's current location
+ * automatically (asks permission once) and fills in the address in the background. "Adjust on map" is the
+ * alternative. The address/landmark is always editable. [requirePng] keeps points inside PNG (server rule).
  */
 @Composable
 fun PlaceField(
@@ -66,42 +70,63 @@ fun PlaceField(
     modifier: Modifier = Modifier,
     hint: String = "Pick a busy public place, not your home.",
     requirePng: Boolean = true,
+    autoLocate: Boolean = true,
 ) {
     val app = LocalApp.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    // Always read the newest value: the address lookup finishes later and must not undo what the person typed.
+    val current by rememberUpdatedState(place)
+    val update by rememberUpdatedState(onChange)
     var locating by remember { mutableStateOf(false) }
     var mapOpen by remember { mutableStateOf(false) }
+    var source by remember { mutableStateOf(if (place.hasPoint) "saved" else "") }
+    var problem by remember { mutableStateOf<String?>(null) }
 
-    fun accept(p: Place) {
+    fun accept(p: Place, from: String) {
         if (requirePng && p.hasPoint && !p.inPng) {
-            app.say("That point is outside Papua New Guinea. Set it on the map instead.")
+            problem = "Your location is outside Papua New Guinea. Set the point on the map."
             return
         }
-        onChange(p)
-        if (p.address.isBlank() && p.hasPoint) scope.launch {
+        problem = null
+        source = from
+        update(p)
+        if (p.hasPoint) scope.launch {
             val guess = Places.describe(context, p.latitude!!.toDouble(), p.longitude!!.toDouble())
-            if (guess.isNotEmpty()) onChange(p.copy(address = guess))
+            // Fill the address only if the person has not typed one meanwhile.
+            if (guess.isNotEmpty() && current.address.isBlank() && current.latitude == p.latitude) update(current.copy(address = guess))
         }
     }
 
     fun locate() {
         if (!Places.locationOn(context)) {
-            app.say("Turn on Location in your phone's quick settings, then try again.")
+            problem = "Location is off. Turn it on in quick settings and tap Try again, or set the point on the map."
             return
         }
+        problem = null
         locating = true
+        // Instant first guess from the phone's last fix, then a fresh, more accurate one.
+        Places.lastKnown(context)?.let { accept(Place.of(it.latitude, it.longitude, current.address), "gps") }
         scope.launch {
             val fix = Places.current(context)
             locating = false
-            if (fix == null) app.say("Could not get a GPS fix. Go near a window or outside, or set the point on the map.")
-            else accept(Place.of(fix.latitude, fix.longitude, place.address))
+            if (fix != null) accept(Place.of(fix.latitude, fix.longitude, current.address), "gps")
+            else if (!current.hasPoint) problem = "Could not get a GPS fix. Go near a window or outside and tap Try again, or set the point on the map."
         }
     }
 
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
-        if (granted.values.any { it }) locate() else app.say("Location permission was not given. You can set the point on the map.")
+        if (granted.values.any { it }) locate()
+        else problem = "Location permission was not given. Set the point on the map, or allow location and tap Try again."
     }
+
+    fun locateOrAsk() {
+        if (Places.hasPermission(context)) locate()
+        else permission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+    }
+
+    // Default: use the current location as soon as the form opens.
+    LaunchedEffect(Unit) { if (autoLocate && !current.hasPoint) locateOrAsk() }
 
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.White).border(1.dp, Mx.Field, RoundedCornerShape(16.dp))
@@ -111,40 +136,53 @@ fun PlaceField(
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Icon(Ic.Pin, null, tint = Mx.Blue, modifier = Modifier.size(20.dp))
             Text(title, fontWeight = FontWeight.Bold, fontSize = 15.sp, modifier = Modifier.weight(1f))
-            if (place.hasPoint) {
-                Text("Clear", color = Mx.Muted, fontSize = 13.sp, modifier = Modifier.clip(RoundedCornerShape(8.dp))
-                    .clickable { onChange(place.copy(latitude = null, longitude = null)) }.padding(4.dp))
-            }
         }
-        if (place.hasPoint) {
-            Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Mx.Tint).padding(10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Icon(Ic.Check, null, tint = Mx.Green, modifier = Modifier.size(18.dp))
-                Column(Modifier.weight(1f)) {
-                    Text("GPS point set", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                    Text(place.coordinates(), fontSize = 12.sp, color = Mx.Muted, modifier = Modifier.testTag("place-coordinates"))
-                }
-                Text("View", color = Mx.Blue, fontWeight = FontWeight.Bold, fontSize = 13.sp,
-                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { Places.openInMaps(context, place, title) }.padding(6.dp))
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (problem != null) Color(0xFFFDE2E1) else Mx.Tint).padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            when {
+                locating && !place.hasPoint -> CircularProgressIndicator(Modifier.size(18.dp), color = Mx.Blue, strokeWidth = 2.dp)
+                problem != null -> Text("⚠", color = Mx.Red, fontWeight = FontWeight.Bold)
+                else -> Icon(Ic.Locate, null, tint = Mx.Green, modifier = Modifier.size(20.dp))
             }
+            Column(Modifier.weight(1f)) {
+                Text(
+                    when {
+                        problem != null -> problem!!
+                        locating && !place.hasPoint -> "Finding your location…"
+                        place.hasPoint && source == "map" -> "Point set on the map"
+                        place.hasPoint && locating -> "Your current location (improving accuracy…)"
+                        place.hasPoint -> "Your current location"
+                        else -> "No location yet"
+                    },
+                    fontWeight = FontWeight.SemiBold, fontSize = 13.sp, lineHeight = 18.sp,
+                    color = if (problem != null) Color(0xFF7A1A14) else Mx.Ink, modifier = Modifier.testTag("place-status"),
+                )
+                if (place.hasPoint) Text(place.coordinates(), fontSize = 12.sp, color = Mx.Muted, modifier = Modifier.testTag("place-coordinates"))
+            }
+            if (place.hasPoint) Text("View", color = Mx.Blue, fontWeight = FontWeight.Bold, fontSize = 13.sp,
+                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { Places.openInMaps(context, place, title) }.padding(6.dp))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            LineButton(if (locating) "Finding you…" else "Use my location", enabled = !locating, modifier = Modifier.weight(1f).testTag("use-my-location"), onClick = {
-                if (Places.hasPermission(context)) locate()
-                else permission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
-            })
-            LineButton("Set on map", modifier = Modifier.weight(1f).testTag("set-on-map"), onClick = { mapOpen = true })
+            LineButton(
+                when {
+                    locating -> "Finding you…"
+                    problem != null || !place.hasPoint -> "Try again"
+                    else -> "Refresh location"
+                },
+                enabled = !locating, modifier = Modifier.weight(1f).testTag("use-my-location"), onClick = { locateOrAsk() },
+            )
+            LineButton("Adjust on map", modifier = Modifier.weight(1f).testTag("set-on-map"), onClick = { mapOpen = true })
         }
-        Field(place.address, { onChange(place.copy(address = it.take(200))) }, "Address or landmark (e.g. Eriku market gate)", tag = "place-address")
+        Field(place.address, { update(current.copy(address = it.take(200))) }, "Address or landmark (edit if needed)", tag = "place-address")
         Text(hint, fontSize = 12.sp, color = Mx.Muted)
     }
 
     if (mapOpen) MapPicker(start = place.takeIf { it.hasPoint }, onDismiss = { mapOpen = false }) { lat, lng ->
         mapOpen = false
-        accept(Place.of(lat, lng, place.address))
+        accept(Place.of(lat, lng, current.address), "map")
     }
 }
 

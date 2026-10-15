@@ -279,7 +279,7 @@ fun OrderScreen(nav: NavHostController, orderId: String) {
             text = { PlaceField("Handover place", draft, { draft = it }, hint = "The other person sees the change on this order.") },
             confirmButton = {
                 TextButton(onClick = {
-                    if (draft.isEmpty) return@TextButton app.say("Set a GPS point or type an address")
+                    if (draft.isEmpty) return@TextButton app.say("Set a GPS point or type an address", error = true)
                     editingPlace = null
                     busy = true
                     app.launch(onDone = { busy = false }) {

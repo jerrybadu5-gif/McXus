@@ -7,6 +7,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.navigation.compose.rememberNavController
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.MainScope
@@ -34,6 +36,7 @@ import pg.mcxus.app.ui.screens.SellScreen
 import pg.mcxus.app.ui.screens.SignInScreen
 import pg.mcxus.app.ui.theme.McXusTheme
 import java.io.File
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.unit.dp
 import kotlin.random.Random
@@ -149,13 +152,23 @@ class ScreenshotTour {
         var screen by mutableStateOf("signin")
         compose.setContent {
             McXusTheme {
-                CompositionLocalProvider(LocalApp provides app) { Screen(screen, conv, listingId, orderId, group) }
+                CompositionLocalProvider(LocalApp provides app) {
+                    androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) {
+                        Screen(screen, conv, listingId, orderId, group)
+                        MessageHost(app, androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.BottomCenter))
+                    }
+                }
             }
         }
         val dir = File(out!!).apply { mkdirs() }
-        listOf("signin", "chats", "chat", "discover", "market", "listing", "sell", "wallet", "order", "me", "place", "map", "group-chat", "group-info", "new-group").forEachIndexed { i, name ->
-            screen = name
+        listOf("signin", "chats", "chat", "discover", "market", "listing", "sell", "wallet", "order", "me", "place", "map", "group-chat", "group-info", "new-group", "sell-error", "error-toast").forEachIndexed { i, name ->
+            screen = if (name == "sell-error") "sell" else if (name == "error-toast") "market" else name
             compose.waitForIdle()
+            if (name == "sell-error") {
+                Thread.sleep(1500)
+                compose.onNodeWithTag("post-listing", useUnmergedTree = true).performClick()
+            }
+            if (name == "error-toast") app.say(pg.mcxus.app.OUTDATED, error = true)
             Thread.sleep(2500) // let network loads finish
             compose.waitForIdle()
             val view = compose.activity.window.decorView

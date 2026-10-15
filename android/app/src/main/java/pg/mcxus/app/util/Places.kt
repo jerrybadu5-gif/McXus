@@ -107,6 +107,17 @@ object Places {
         }
     }
 
+    /** The most recent fix the phone already has (instant), if it is less than [maxAgeMs] old. */
+    @SuppressLint("MissingPermission")
+    fun lastKnown(context: Context, maxAgeMs: Long = 10 * 60_000): Location? {
+        if (!hasPermission(context)) return null
+        val lm = context.getSystemService(LocationManager::class.java) ?: return null
+        val best = listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER, LocationManager.PASSIVE_PROVIDER)
+            .mapNotNull { runCatching { lm.getLastKnownLocation(it) }.getOrNull() }
+            .maxByOrNull { it.time } ?: return null
+        return best.takeIf { System.currentTimeMillis() - it.time < maxAgeMs }
+    }
+
     /** Best-effort street/suburb name for a point (often empty in PNG; the person can always type a landmark). */
     @Suppress("DEPRECATION")
     suspend fun describe(context: Context, lat: Double, lng: Double): String = withContext(Dispatchers.IO) {

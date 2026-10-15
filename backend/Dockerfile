@@ -7,8 +7,10 @@ COPY app ./app
 RUN pip install --no-cache-dir .
 COPY alembic.ini ./
 COPY migrations ./migrations
-RUN mkdir -p /app/media && chown mcxus /app/media
-ENV MCXUS_MEDIA_DIR=/app/media
+# media: public listing photos. blobs: encrypted chat photos/voice notes (private). Both are Docker volumes and
+# must belong to the app user, or uploads fail with "permission denied".
+RUN mkdir -p /app/media /app/blobs && chown mcxus /app/media /app/blobs
+ENV MCXUS_MEDIA_DIR=/app/media MCXUS_BLOB_DIR=/app/blobs
 USER mcxus
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s CMD python -c "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"

@@ -144,7 +144,7 @@ fun NewGroupScreen(nav: NavHostController) {
             busy = true
             app.launch(onDone = { busy = false }) {
                 val (conv, result) = engine.createGroup(title.trim(), selected.toList())
-                explainMissing(engine, result, candidates.associate { it.id to it.name })?.let(app::say)
+                explainMissing(engine, result, candidates.associate { it.id to it.name })?.let { app.say(it, error = true) }
                 nav.navigate(Routes.chat(conv)) { popUpTo(Routes.HOME) }
             }
         })
@@ -258,7 +258,7 @@ fun GroupInfoScreen(nav: NavHostController, conversationId: String) {
                         val names = candidates.associate { it.id to it.name }
                         act {
                             val r = engine.addMembers(conversationId, selected.toList())
-                            app.say(explainMissing(engine, r, names) ?: "${r.added.size} added")
+                            explainMissing(engine, r, names)?.let { app.say(it, error = true) } ?: app.say("${r.added.size} added")
                         }
                     }) { Text("Add") }
                 },

@@ -6,7 +6,7 @@ from tests.conftest import auth, make_user
 
 
 def test_health(client):
-    assert client.get("/health").json() == {"status": "ok", "sandbox": True}
+    assert client.get("/health").json() == {"status": "ok", "sandbox": True, "api_level": 4}
 
 
 def test_phone_sign_in_flow(client, monkeypatch):
